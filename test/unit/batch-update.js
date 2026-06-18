@@ -2,13 +2,12 @@
 
 const { expect } = require('chai');
 const knexLib = require('../../knex');
-const {
-  buildBatchUpdateQuery,
-  updatableColumns,
-} = require('../../lib/execution/batch-update');
+const { updatableColumns } = require('../../lib/execution/batch-update');
 
 // Per-dialect SQL generation for batchUpdate, asserted via toSQL() without a
 // live database. Behavioural (real DML) coverage lives in the integration suite.
+// The SQL is produced by each dialect's QueryCompiler#batchUpdate, reached
+// through the builder method knex(table).batchUpdate(rows, keyColumns, columns).
 describe('batchUpdate (db-less)', function () {
   const clients = {};
   const dialects = [
@@ -37,14 +36,9 @@ describe('batchUpdate (db-less)', function () {
   ];
 
   function sqlFor(client, key, columns, batch) {
-    const knex = clients[client];
-    return buildBatchUpdateQuery(
-      knex,
-      'users',
-      Array.isArray(key) ? key : [key],
-      columns,
-      batch
-    ).toSQL();
+    return clients[client]('users')
+      .batchUpdate(batch, Array.isArray(key) ? key : [key], columns)
+      .toSQL();
   }
 
   it('postgres emits UPDATE ... FROM (SELECT ...) with first-row casts', function () {
@@ -57,7 +51,7 @@ describe('batchUpdate (db-less)', function () {
     expect(bindings).to.eql([1, 'a', 10, 2, 'b', 20]);
   });
 
-  it('cockroachdb and redshift reuse the postgres FROM form (no builder updateFrom)', function () {
+  it('cockroachdb and redshift reuse the postgres FROM form', function () {
     const expected =
       'update "users" set "name" = "v"."name", "age" = "v"."age" from ' +
       '(select ?::numeric as "id", ?::text as "name", ?::numeric as "age" ' +
@@ -80,17 +74,16 @@ describe('batchUpdate (db-less)', function () {
     expect(bindings).to.eql([1, 'a', 10, 2, 'b', 20]);
   });
 
-  it('mssql emits UPDATE ... FROM ... JOIN with the @@rowcount tail', function () {
+  it('mssql emits UPDATE ... FROM (SELECT ...) with the @@rowcount tail', function () {
     const { sql } = sqlFor('mssql', 'id', ['name', 'age'], rows);
     expect(sql).to.equal(
-      'update [users] set [users].[name] = [src].[name], ' +
-        '[users].[age] = [src].[age] from [users] inner join ' +
+      'update [users] set [name] = [v].[name], [age] = [v].[age] from ' +
         '(select ? as [id], ? as [name], ? as [age] union all select ?, ?, ?) ' +
-        'as [src] on [users].[id] = [src].[id];select @@rowcount'
+        'as [v] where [users].[id] = [v].[id];select @@rowcount'
     );
   });
 
-  it('sqlite emits UPDATE ... FROM (derived) without casts', function () {
+  it('sqlite emits UPDATE ... FROM (SELECT ...) without casts', function () {
     const { sql } = sqlFor('sqlite3', 'id', ['name', 'age'], rows);
     expect(sql).to.equal(
       'update `users` set `name` = `v`.`name`, `age` = `v`.`age` from ' +
@@ -132,32 +125,24 @@ describe('batchUpdate (db-less)', function () {
     );
   });
 
-  it('appends RETURNING on postgres only', function () {
-    const single = [{ id: 1, name: 'a' }];
-    const knex = clients['pg'];
-    const { sql } = buildBatchUpdateQuery(
-      knex,
-      'users',
-      ['id'],
-      ['name'],
-      single,
-      ['id', 'updated_at']
-    ).toSQL();
+  it('appends a target-qualified RETURNING on postgres', function () {
+    const { sql } = clients['pg']('users')
+      .batchUpdate([{ id: 1, name: 'a' }], ['id'], ['name'])
+      .returning(['id', 'updated_at'])
+      .toSQL();
+    // qualified to disambiguate from the FROM source which shares "id"
     expect(sql).to.contain('returning "users"."id", "users"."updated_at"');
-
-    for (const client of ['mysql', 'sqlite3', 'redshift', 'oracledb']) {
-      const knexC = clients[client];
-      expect(() =>
-        buildBatchUpdateQuery(knexC, 'users', ['id'], ['name'], single, ['id'])
-      ).to.throw(/returning\(\) is not supported/);
-    }
   });
 
-  it('throws for an unsupported dialect', function () {
-    const fakeQb = { client: { dialect: 'firebird' } };
-    expect(() =>
-      buildBatchUpdateQuery(fakeQb, 'users', ['id'], ['name'], rows)
-    ).to.throw(/is not supported for firebird/);
+  it('throws for .returning() on dialects without it', function () {
+    for (const client of ['mysql', 'sqlite3', 'redshift', 'oracledb']) {
+      expect(() =>
+        clients[client]('users')
+          .batchUpdate([{ id: 1, name: 'a' }], ['id'], ['name'])
+          .returning(['id'])
+          .toSQL()
+      ).to.throw(/returning\(\) is not supported/);
+    }
   });
 
   describe('input validation', function () {

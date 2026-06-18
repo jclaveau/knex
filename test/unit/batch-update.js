@@ -152,6 +152,35 @@ describe('batchUpdate (db-less)', function () {
     expect(sql).to.contain('returning "users"."id", "users"."updated_at"');
   });
 
+  it('infers a postgres cast for each JS value type', function () {
+    const { sql } = clients['pg']('users')
+      .batchUpdate(
+        [
+          {
+            id: 1,
+            flag: true,
+            when: new Date(),
+            buf: Buffer.from('x'),
+            doc: { a: 1 },
+            note: 'hi',
+          },
+        ],
+        ['id'],
+        ['flag', 'when', 'buf', 'doc', 'note']
+      )
+      .toSQL();
+    expect(sql).to.contain('?::numeric as "id"');
+    expect(sql).to.contain('?::boolean as "flag"');
+    expect(sql).to.contain('?::timestamptz as "when"');
+    expect(sql).to.contain('?::bytea as "buf"');
+    expect(sql).to.contain('?::jsonb as "doc"');
+    expect(sql).to.contain('?::text as "note"');
+  });
+
+  it('resolves to an empty result for an empty batch', async function () {
+    expect(await clients['pg'].batchUpdate('users', [])).to.eql([]);
+  });
+
   it('infers bigint and honors the columnTypes override (postgres)', function () {
     const { sql } = clients['pg']('users')
       .batchUpdate([{ id: 1n, tags: ['a'] }], ['id'], ['tags'], {

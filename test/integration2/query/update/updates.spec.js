@@ -803,6 +803,34 @@ describe('Updates', function () {
           expect(rows.map((r) => r.name)).to.eql(['c1', 'c2']);
         });
 
+        it('runs ceil(rows / chunkSize) set-based statements', async function () {
+          const statements = [];
+          const onQuery = (query) => {
+            // count the data statements only, not BEGIN/COMMIT
+            if (/^\s*(update|merge)\s/i.test(query.sql)) {
+              statements.push(query.sql);
+            }
+          };
+          const threeRows = [
+            { id: 1, name: 's1', age: 1 },
+            { id: 2, name: 's2', age: 2 },
+            { id: 3, name: 's3', age: 3 },
+          ];
+
+          // 3 rows, chunkSize 2 -> ceil(3/2) = 2 statements
+          knex.on('query', onQuery);
+          await knex.batchUpdate('BatchUpdate', threeRows, 'id', 2);
+          knex.off('query', onQuery);
+          expect(statements).to.have.lengthOf(2);
+
+          // 3 rows, single (default) chunk -> 1 statement
+          statements.length = 0;
+          knex.on('query', onQuery);
+          await knex.batchUpdate('BatchUpdate', threeRows, 'id');
+          knex.off('query', onQuery);
+          expect(statements).to.have.lengthOf(1);
+        });
+
         it('supports a composite key', async function () {
           await knex.schema.dropTableIfExists('BatchUpdateComposite');
           await knex.schema.createTable('BatchUpdateComposite', (table) => {

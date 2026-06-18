@@ -137,6 +137,17 @@ describe('batchUpdate (db-less)', function () {
     expect(sql).to.contain('returning "users"."id", "users"."updated_at"');
   });
 
+  it('infers bigint and honors the columnTypes override (postgres)', function () {
+    const { sql } = clients['pg']('users')
+      .batchUpdate([{ id: 1n, tags: ['a'] }], ['id'], ['tags'], {
+        tags: 'text[]',
+      })
+      .toSQL();
+    // bigint value inferred; tags cast taken from columnTypes
+    expect(sql).to.contain('?::bigint as "id"');
+    expect(sql).to.contain('?::text[] as "tags"');
+  });
+
   it('throws for .returning() on dialects without it', function () {
     for (const client of ['mysql', 'sqlite3', 'redshift', 'oracledb']) {
       expect(() =>
@@ -185,6 +196,14 @@ describe('batchUpdate (db-less)', function () {
           onDuplicateKey: 'nope',
         })
       ).to.throw(/Invalid onDuplicateKey/);
+    });
+
+    it('rejects a non-object columnTypes option', function () {
+      expect(() =>
+        clients['pg'].batchUpdate('users', rows, 'id', 1000, {
+          columnTypes: 'nope',
+        })
+      ).to.throw(/Invalid columnTypes/);
     });
   });
 

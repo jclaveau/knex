@@ -58,6 +58,7 @@ It picks the best statement each dialect supports — `UPDATE ... FROM (SELECT .
 - **Returns** the affected-row counts (not identities — the caller already supplies every key). [returning](/guide/query-builder#returning) is opt-in for DB-computed columns and is only honored on the PostgreSQL family; it throws on other dialects.
 - Large batches are split into chunks of `chunkSize`; keep that in mind against the SQLite (~999) and MSSQL (2100) bind-parameter limits.
 - **Duplicate keys.** A set-based UPDATE has no defined row order, so two rows sharing a key would be non-deterministic (and Oracle's `MERGE` errors on it). By default the **last** row for a key wins (`options.onDuplicateKey: 'last'`); pass `options: { onDuplicateKey: 'throw' }` to reject duplicates instead.
+- **Column casts (Postgres family).** On PostgreSQL/CockroachDB/Redshift the values source is cast from each value's JS type (`number→numeric`, `bigint`, `boolean`, `Date→timestamptz`, `Buffer→bytea`, object→`jsonb`, else `text`). The JS type can't reveal columns like `uuid`, `enum`, arrays, or columns that are all-null in a chunk — for those, pass explicit casts via `options.columnTypes`, e.g. `{ columnTypes: { id: 'uuid', tags: 'text[]' } }`.
 
 ```js
 const rows = [

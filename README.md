@@ -37,17 +37,6 @@ For knex-based Object Relational Mapper, see:
 
 To see the SQL that Knex will generate for a given query, you can use [Knex Query Lab](https://michaelavila.com/knex-querylab/)
 
-## Fork additions
-
-This fork adds features not yet in upstream knex, kept here until they are
-upstreamed:
-
-- **`knex.batchUpdate(table, rows, key, chunkSize)`** — the update sibling of
-  `batchInsert`: updates many rows with different per-row values in one
-  set-based statement per chunk (`UPDATE ... FROM` / `JOIN` / `MERGE` per
-  dialect). Pending upstream PR; tracked in
-  [knex/knex#5716](https://github.com/knex/knex/issues/5716).
-
 ## Local Development Setup
 
 ### Prerequisites

@@ -2,10 +2,7 @@
 
 const { expect } = require('chai');
 const knexLib = require('../../knex');
-const {
-  updatableColumns,
-  dedupeByKey,
-} = require('../../lib/execution/batch-update');
+const { prepareBatch } = require('../../lib/execution/batch-update');
 
 // Per-dialect SQL generation for batchUpdate, asserted via toSQL() without a
 // live database. Behavioural (real DML) coverage lives in the integration suite.
@@ -162,12 +159,12 @@ describe('batchUpdate (db-less)', function () {
   describe('input validation', function () {
     it('rejects ragged rows (different column sets)', function () {
       expect(() =>
-        updatableColumns([{ id: 1, name: 'a' }, { id: 2 }], ['id'])
+        prepareBatch([{ id: 1, name: 'a' }, { id: 2 }], ['id'], 'last')
       ).to.throw(/every row must have the key column/);
     });
 
     it('rejects rows with no non-key columns', function () {
-      expect(() => updatableColumns([{ id: 1 }], ['id'])).to.throw(
+      expect(() => prepareBatch([{ id: 1 }], ['id'], 'last')).to.throw(
         /no non-key columns/
       );
     });
@@ -210,15 +207,15 @@ describe('batchUpdate (db-less)', function () {
   describe('duplicate keys', function () {
     it('keeps the last row per key by default (last-write-wins)', function () {
       expect(
-        dedupeByKey(
+        prepareBatch(
           [
             { id: 1, v: 'a' },
             { id: 1, v: 'b' },
             { id: 2, v: 'c' },
           ],
           ['id'],
-          false
-        )
+          'last'
+        ).rows
       ).to.eql([
         { id: 1, v: 'b' },
         { id: 2, v: 'c' },
@@ -227,15 +224,15 @@ describe('batchUpdate (db-less)', function () {
 
     it('dedupes on the full composite key', function () {
       expect(
-        dedupeByKey(
+        prepareBatch(
           [
             { tenant: 7, id: 1, v: 'a' },
             { tenant: 8, id: 1, v: 'b' }, // same id, different tenant — kept
             { tenant: 7, id: 1, v: 'c' }, // collides with the first — last wins
           ],
           ['tenant', 'id'],
-          false
-        )
+          'last'
+        ).rows
       ).to.eql([
         { tenant: 7, id: 1, v: 'c' },
         { tenant: 8, id: 1, v: 'b' },
@@ -243,9 +240,16 @@ describe('batchUpdate (db-less)', function () {
     });
 
     it('throws on a duplicate key when requested', function () {
-      expect(() => dedupeByKey([{ id: 1 }, { id: 1 }], ['id'], true)).to.throw(
-        /duplicate key/
-      );
+      expect(() =>
+        prepareBatch(
+          [
+            { id: 1, v: 'a' },
+            { id: 1, v: 'b' },
+          ],
+          ['id'],
+          'throw'
+        )
+      ).to.throw(/duplicate key/);
     });
   });
 });

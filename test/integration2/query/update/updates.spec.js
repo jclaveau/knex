@@ -905,10 +905,9 @@ describe('Updates', function () {
           assertNumber(knex, row.age, 2);
         });
 
-        it('throws on a duplicate key with onDuplicateKey: throw', async function () {
-          let error;
-          await knex
-            .batchUpdate(
+        it('throws on a duplicate key with onDuplicateKey: throw', function () {
+          expect(() =>
+            knex.batchUpdate(
               'BatchUpdate',
               [
                 { id: 1, name: 'a', age: 1 },
@@ -918,11 +917,7 @@ describe('Updates', function () {
               1000,
               { onDuplicateKey: 'throw' }
             )
-            .catch((e) => {
-              error = e;
-            });
-          expect(error).to.exist;
-          expect(error.message).to.match(/duplicate key/);
+          ).to.throw(/duplicate key/);
         });
       });
     });

@@ -770,11 +770,14 @@ describe('Updates', function () {
           ]);
 
           const rows = await knex('BatchUpdate').orderBy('id');
-          expect(rows.map((r) => [r.id, r.name, Number(r.age)])).to.eql([
-            [1, 'new1', 11],
-            [2, 'new2', 22],
-            [3, 'decoy', 99], // outside the batch — must be unchanged
-          ]);
+          // Number() coerces CockroachDB's int-as-string columns.
+          expect(rows.map((r) => [Number(r.id), r.name, Number(r.age)])).to.eql(
+            [
+              [1, 'new1', 11],
+              [2, 'new2', 22],
+              [3, 'decoy', 99], // outside the batch — must be unchanged
+            ]
+          );
         });
 
         it('returns the requested columns on postgres-family dialects', async function () {
@@ -861,7 +864,10 @@ describe('Updates', function () {
             'tenant',
             'id',
           ]);
-          expect(rows.map((r) => [r.tenant, r.id, r.name])).to.eql([
+          // Number() coerces CockroachDB's int-as-string columns.
+          expect(
+            rows.map((r) => [Number(r.tenant), Number(r.id), r.name])
+          ).to.eql([
             [7, 1, 'A'],
             [7, 2, 'B'],
             [8, 1, 'other-tenant'], // same id, different tenant — untouched

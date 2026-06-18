@@ -35,14 +35,10 @@ describe('batchUpdate (db-less)', function () {
     { id: 2, name: 'b', age: 20 },
   ];
 
-  function sqlFor(client, key, columns, batch) {
-    return clients[client]('users')
-      .batchUpdate(batch, Array.isArray(key) ? key : [key], columns)
-      .toSQL();
-  }
-
   it('postgres emits UPDATE ... FROM (SELECT ...) with first-row casts', function () {
-    const { sql, bindings } = sqlFor('pg', 'id', ['name', 'age'], rows);
+    const { sql, bindings } = clients['pg']('users')
+      .batchUpdate(rows, ['id'], ['name', 'age'])
+      .toSQL();
     expect(sql).to.equal(
       'update "users" set "name" = "v"."name", "age" = "v"."age" from ' +
         '(select ?::numeric as "id", ?::text as "name", ?::numeric as "age" ' +
@@ -56,16 +52,22 @@ describe('batchUpdate (db-less)', function () {
       'update "users" set "name" = "v"."name", "age" = "v"."age" from ' +
       '(select ?::numeric as "id", ?::text as "name", ?::numeric as "age" ' +
       'union all select ?, ?, ?) as "v" where "users"."id" = "v"."id"';
-    expect(sqlFor('cockroachdb', 'id', ['name', 'age'], rows).sql).to.equal(
-      expected
-    );
-    expect(sqlFor('redshift', 'id', ['name', 'age'], rows).sql).to.equal(
-      expected
-    );
+    expect(
+      clients['cockroachdb']('users')
+        .batchUpdate(rows, ['id'], ['name', 'age'])
+        .toSQL().sql
+    ).to.equal(expected);
+    expect(
+      clients['redshift']('users')
+        .batchUpdate(rows, ['id'], ['name', 'age'])
+        .toSQL().sql
+    ).to.equal(expected);
   });
 
   it('mysql emits UPDATE ... JOIN (derived) SET', function () {
-    const { sql, bindings } = sqlFor('mysql', 'id', ['name', 'age'], rows);
+    const { sql, bindings } = clients['mysql']('users')
+      .batchUpdate(rows, ['id'], ['name', 'age'])
+      .toSQL();
     expect(sql).to.equal(
       'update `users` inner join (select ? as `id`, ? as `name`, ? as `age` ' +
         'union all select ?, ?, ?) as `src` on `users`.`id` = `src`.`id` ' +
@@ -75,7 +77,9 @@ describe('batchUpdate (db-less)', function () {
   });
 
   it('mssql emits UPDATE ... FROM (SELECT ...) with the @@rowcount tail', function () {
-    const { sql } = sqlFor('mssql', 'id', ['name', 'age'], rows);
+    const { sql } = clients['mssql']('users')
+      .batchUpdate(rows, ['id'], ['name', 'age'])
+      .toSQL();
     expect(sql).to.equal(
       'update [users] set [name] = [v].[name], [age] = [v].[age] from ' +
         '(select ? as [id], ? as [name], ? as [age] union all select ?, ?, ?) ' +
@@ -84,7 +88,9 @@ describe('batchUpdate (db-less)', function () {
   });
 
   it('sqlite emits UPDATE ... FROM (SELECT ...) without casts', function () {
-    const { sql } = sqlFor('sqlite3', 'id', ['name', 'age'], rows);
+    const { sql } = clients['sqlite3']('users')
+      .batchUpdate(rows, ['id'], ['name', 'age'])
+      .toSQL();
     expect(sql).to.equal(
       'update `users` set `name` = `v`.`name`, `age` = `v`.`age` from ' +
         '(select ? as `id`, ? as `name`, ? as `age` union all select ?, ?, ?) ' +
@@ -93,7 +99,9 @@ describe('batchUpdate (db-less)', function () {
   });
 
   it('oracle emits a MERGE using FROM dual (no AS aliases)', function () {
-    const { sql } = sqlFor('oracledb', 'id', ['name', 'age'], rows);
+    const { sql } = clients['oracledb']('users')
+      .batchUpdate(rows, ['id'], ['name', 'age'])
+      .toSQL();
     expect(sql).to.equal(
       'merge into "users" tgt using (select ? "id", ? "name", ? "age" from dual ' +
         'union all select ?, ?, ? from dual) "v" on ("tgt"."id" = "v"."id") ' +
@@ -107,19 +115,29 @@ describe('batchUpdate (db-less)', function () {
       { tenant: 9, id: 1, name: 'a' },
       { tenant: 9, id: 2, name: 'b' },
     ];
-    expect(sqlFor('pg', ['tenant', 'id'], ['name'], composite).sql).to.equal(
+    expect(
+      clients['pg']('users')
+        .batchUpdate(composite, ['tenant', 'id'], ['name'])
+        .toSQL().sql
+    ).to.equal(
       'update "users" set "name" = "v"."name" from ' +
         '(select ?::numeric as "tenant", ?::numeric as "id", ?::text as "name" ' +
         'union all select ?, ?, ?) as "v" ' +
         'where "users"."tenant" = "v"."tenant" and "users"."id" = "v"."id"'
     );
-    expect(sqlFor('mysql', ['tenant', 'id'], ['name'], composite).sql).to.equal(
+    expect(
+      clients['mysql']('users')
+        .batchUpdate(composite, ['tenant', 'id'], ['name'])
+        .toSQL().sql
+    ).to.equal(
       'update `users` inner join (select ? as `tenant`, ? as `id`, ? as `name` ' +
         'union all select ?, ?, ?) as `src` on `users`.`tenant` = `src`.`tenant` ' +
         'and `users`.`id` = `src`.`id` set `users`.`name` = `src`.`name`'
     );
     expect(
-      sqlFor('oracledb', ['tenant', 'id'], ['name'], composite).sql
+      clients['oracledb']('users')
+        .batchUpdate(composite, ['tenant', 'id'], ['name'])
+        .toSQL().sql
     ).to.contain(
       'on ("tgt"."tenant" = "v"."tenant" and "tgt"."id" = "v"."id")'
     );

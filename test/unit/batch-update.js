@@ -277,6 +277,47 @@ describe('batchUpdate (db-less)', function () {
         })
       ).to.throw(/Invalid columnTypes/);
     });
+
+    it('rejects a columnTypes value that is not a safe type name', function () {
+      expect(() =>
+        clients['pg'].batchUpdate('users', rows, 'id', 1000, {
+          columnTypes: { name: 'text); drop table users; --' },
+        })
+      ).to.throw(/Invalid columnTypes\.name/);
+    });
+
+    it('accepts parameterized and array type names', function () {
+      for (const type of ['text[]', 'varchar(255)', 'numeric(10, 2)']) {
+        // No DB here: assert construction doesn't throw, swallow the async run.
+        const op = clients['pg'].batchUpdate('users', rows, 'id', 1000, {
+          columnTypes: { name: type },
+        });
+        op.catch(() => {});
+      }
+    });
+
+    it('throws when columnTypes is used on a non-postgres dialect', function () {
+      for (const client of ['mysql', 'sqlite3', 'mssql', 'oracledb']) {
+        expect(() =>
+          clients[client]('users')
+            .batchUpdate(rows, ['id'], ['name', 'age'], { name: 'text' })
+            .toSQL()
+        ).to.throw(/columnTypes is only supported on the postgres family/);
+      }
+    });
+
+    it('throws on Redshift for bytea/jsonb casts it has no type for', function () {
+      expect(() =>
+        clients['redshift']('users')
+          .batchUpdate([{ id: 1, doc: { a: 1 } }], ['id'], ['doc'])
+          .toSQL()
+      ).to.throw(/Redshift has no jsonb type/);
+      expect(() =>
+        clients['redshift']('users')
+          .batchUpdate([{ id: 1, buf: Buffer.from('x') }], ['id'], ['buf'])
+          .toSQL()
+      ).to.throw(/Redshift has no bytea type/);
+    });
   });
 
   describe('duplicate keys', function () {

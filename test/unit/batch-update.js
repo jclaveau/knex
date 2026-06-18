@@ -143,7 +143,7 @@ describe('batchUpdate (db-less)', function () {
       single,
       ['id', 'updated_at']
     ).toSQL();
-    expect(sql).to.contain('returning "id", "updated_at"');
+    expect(sql).to.contain('returning "users"."id", "users"."updated_at"');
 
     for (const client of ['mysql', 'sqlite3', 'redshift', 'oracledb']) {
       const knexC = clients[client];

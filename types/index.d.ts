@@ -425,7 +425,8 @@ interface Knex<TRecord extends {} = any, TResult = any[]>
       ? ReadonlyArray<Knex.ResolveTableType<TRecord2, 'update'>>
       : ReadonlyArray<Knex.DbRecordArr<TRecord2>>,
     key?: string | readonly string[],
-    chunkSize?: number
+    chunkSize?: number,
+    options?: { onDuplicateKey?: 'last' | 'throw' }
   ): Knex.BatchUpdateBuilder<TRecord2, TResult2>;
 
   schema: Knex.SchemaBuilder;

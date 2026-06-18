@@ -48,7 +48,7 @@ knex
 
 ## batchUpdate
 
-**knex.batchUpdate(tableName, rows, key, chunkSize)**
+**knex.batchUpdate(tableName, rows, key, chunkSize, options)**
 
 The `batchUpdate` utility updates many rows with **different per-row values** in a single set-based statement per chunk, wrapped in a transaction _(automatically created unless explicitly given one using [transacting](/guide/query-builder#transacting))_. Each row is matched to an existing row by `key`, which defaults to `'id'` and may be an array for a composite key. The default `chunkSize` is 1000.
 
@@ -57,6 +57,7 @@ It picks the best statement each dialect supports — `UPDATE ... FROM (SELECT .
 - **Uniform shape required.** Every row must carry the key column(s) plus the _same_ set of non-key columns. Ragged rows (a column present on some rows, absent on others) throw, because a single set-based statement applies one SET clause to all rows and a missing column would silently overwrite existing data with `NULL`. Pre-group ragged data by shape.
 - **Returns** the affected-row counts (not identities — the caller already supplies every key). [returning](/guide/query-builder#returning) is opt-in for DB-computed columns and is only honored on the PostgreSQL family; it throws on other dialects.
 - Large batches are split into chunks of `chunkSize`; keep that in mind against the SQLite (~999) and MSSQL (2100) bind-parameter limits.
+- **Duplicate keys.** A set-based UPDATE has no defined row order, so two rows sharing a key would be non-deterministic (and Oracle's `MERGE` errors on it). By default the **last** row for a key wins (`options.onDuplicateKey: 'last'`); pass `options: { onDuplicateKey: 'throw' }` to reject duplicates instead.
 
 ```js
 const rows = [

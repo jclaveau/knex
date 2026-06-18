@@ -2,7 +2,10 @@
 
 const { expect } = require('chai');
 const knexLib = require('../../knex');
-const { updatableColumns } = require('../../lib/execution/batch-update');
+const {
+  updatableColumns,
+  dedupeByKey,
+} = require('../../lib/execution/batch-update');
 
 // Per-dialect SQL generation for batchUpdate, asserted via toSQL() without a
 // live database. Behavioural (real DML) coverage lives in the integration suite.
@@ -173,6 +176,56 @@ describe('batchUpdate (db-less)', function () {
     it('rejects an invalid key', function () {
       expect(() => clients['pg'].batchUpdate('users', rows, 123)).to.throw(
         /Invalid key/
+      );
+    });
+
+    it('rejects an invalid onDuplicateKey option', function () {
+      expect(() =>
+        clients['pg'].batchUpdate('users', rows, 'id', 1000, {
+          onDuplicateKey: 'nope',
+        })
+      ).to.throw(/Invalid onDuplicateKey/);
+    });
+  });
+
+  describe('duplicate keys', function () {
+    it('keeps the last row per key by default (last-write-wins)', function () {
+      expect(
+        dedupeByKey(
+          [
+            { id: 1, v: 'a' },
+            { id: 1, v: 'b' },
+            { id: 2, v: 'c' },
+          ],
+          ['id'],
+          false
+        )
+      ).to.eql([
+        { id: 1, v: 'b' },
+        { id: 2, v: 'c' },
+      ]);
+    });
+
+    it('dedupes on the full composite key', function () {
+      expect(
+        dedupeByKey(
+          [
+            { tenant: 7, id: 1, v: 'a' },
+            { tenant: 8, id: 1, v: 'b' }, // same id, different tenant — kept
+            { tenant: 7, id: 1, v: 'c' }, // collides with the first — last wins
+          ],
+          ['tenant', 'id'],
+          false
+        )
+      ).to.eql([
+        { tenant: 7, id: 1, v: 'c' },
+        { tenant: 8, id: 1, v: 'b' },
+      ]);
+    });
+
+    it('throws on a duplicate key when requested', function () {
+      expect(() => dedupeByKey([{ id: 1 }, { id: 1 }], ['id'], true)).to.throw(
+        /duplicate key/
       );
     });
   });

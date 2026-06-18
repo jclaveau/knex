@@ -894,6 +894,36 @@ describe('Updates', function () {
             knex.batchUpdate('BatchUpdate', [{ id: 1, name: 'x' }], 'id', 0)
           ).to.throw('Invalid chunkSize: 0');
         });
+
+        it('keeps the last row when a key is duplicated (last-write-wins)', async function () {
+          await knex.batchUpdate('BatchUpdate', [
+            { id: 1, name: 'first', age: 1 },
+            { id: 1, name: 'last', age: 2 },
+          ]);
+          const row = await knex('BatchUpdate').where('id', 1).first();
+          expect(row.name).to.equal('last');
+          assertNumber(knex, row.age, 2);
+        });
+
+        it('throws on a duplicate key with onDuplicateKey: throw', async function () {
+          let error;
+          await knex
+            .batchUpdate(
+              'BatchUpdate',
+              [
+                { id: 1, name: 'a', age: 1 },
+                { id: 1, name: 'b', age: 2 },
+              ],
+              'id',
+              1000,
+              { onDuplicateKey: 'throw' }
+            )
+            .catch((e) => {
+              error = e;
+            });
+          expect(error).to.exist;
+          expect(error.message).to.match(/duplicate key/);
+        });
       });
     });
   });

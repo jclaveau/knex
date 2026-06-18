@@ -306,17 +306,18 @@ describe('batchUpdate (db-less)', function () {
       }
     });
 
-    it('only mssql declares a bind-parameter ceiling (drives chunk capping)', function () {
-      expect(clients['mssql'].client.maxBindParameters).to.equal(2100);
-      for (const client of [
-        'pg',
-        'mysql',
-        'sqlite3',
-        'oracledb',
-        'redshift',
-        'cockroachdb',
-      ]) {
-        expect(clients[client].client.maxBindParameters).to.be.undefined;
+    it('each dialect declares its bind-parameter ceiling (drives chunk capping)', function () {
+      const expected = {
+        pg: 65535,
+        cockroachdb: 65535,
+        redshift: 65535,
+        mysql: 65535,
+        oracledb: 65535,
+        sqlite3: 32766,
+        mssql: 2100,
+      };
+      for (const [client, limit] of Object.entries(expected)) {
+        expect(clients[client].client.maxBindParameters).to.equal(limit);
       }
     });
 

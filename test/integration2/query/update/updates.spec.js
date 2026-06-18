@@ -9,6 +9,7 @@ const {
   isMariaDB,
   isOracle,
   isCockroachDB,
+  isMssql,
 } = require('../../../util/db-helpers');
 const {
   getAllDbs,
@@ -915,6 +916,48 @@ describe('Updates', function () {
               { onDuplicateKey: 'throw' }
             )
           ).to.throw(/duplicate key/);
+        });
+
+        it('caps chunks under the mssql 2100-parameter limit', async function () {
+          if (!isMssql(knex)) {
+            return this.skip();
+          }
+          // 800 rows x 3 cells = 2400 binds: the default chunkSize of 1000
+          // would exceed mssql's 2100 limit, so the cap must split it.
+          const rows = Array.from({ length: 800 }, (_, i) => ({
+            id: i + 1,
+            name: `n${i + 1}`,
+            age: i,
+          }));
+          await knex.schema.dropTableIfExists('members');
+          await knex.schema.createTable('members', (table) => {
+            table.integer('id').primary();
+            table.string('name');
+            table.integer('age');
+          });
+          await knex.batchInsert('members', rows, 500);
+
+          const statements = [];
+          const onQuery = (query) => {
+            if (/^\s*update\s/i.test(query.sql)) {
+              statements.push(query.sql);
+            }
+          };
+          knex.on('query', onQuery);
+          // Default chunkSize: the cap (floor(2100/3) = 700) must apply.
+          await knex.batchUpdate(
+            'members',
+            rows.map((r) => ({ ...r, name: 'capped' }))
+          );
+          knex.off('query', onQuery);
+
+          // ceil(800 / 700) = 2 statements, and every row updated.
+          expect(statements).to.have.lengthOf(2);
+          const updated = await knex('members')
+            .where('name', 'capped')
+            .count({ c: 'id' })
+            .first();
+          expect(Number(updated.c)).to.equal(800);
         });
       });
     });

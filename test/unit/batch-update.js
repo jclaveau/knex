@@ -306,6 +306,20 @@ describe('batchUpdate (db-less)', function () {
       }
     });
 
+    it('only mssql declares a bind-parameter ceiling (drives chunk capping)', function () {
+      expect(clients['mssql'].client.maxBindParameters).to.equal(2100);
+      for (const client of [
+        'pg',
+        'mysql',
+        'sqlite3',
+        'oracledb',
+        'redshift',
+        'cockroachdb',
+      ]) {
+        expect(clients[client].client.maxBindParameters).to.be.undefined;
+      }
+    });
+
     it('throws on Redshift for bytea/jsonb casts it has no type for', function () {
       expect(() =>
         clients['redshift']('users')

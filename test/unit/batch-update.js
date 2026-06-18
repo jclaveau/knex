@@ -181,6 +181,34 @@ describe('batchUpdate (db-less)', function () {
     expect(await clients['pg'].batchUpdate('users', [])).to.eql([]);
   });
 
+  it('accepts a scalar returning column (postgres)', function () {
+    const { sql } = clients['pg']('users')
+      .batchUpdate([{ id: 1, name: 'a' }], ['id'], ['name'])
+      .returning('name') // scalar, not an array
+      .toSQL();
+    expect(sql).to.contain('returning "users"."name"');
+  });
+
+  it('casts from the first non-null value, else text (postgres)', function () {
+    // first row null for `n` -> skip it, infer from the next row
+    const inferred = clients['pg']('users')
+      .batchUpdate(
+        [
+          { id: 1, n: null },
+          { id: 2, n: 5 },
+        ],
+        ['id'],
+        ['n']
+      )
+      .toSQL().sql;
+    expect(inferred).to.contain('?::numeric as "n"');
+    // all-null column -> text fallback
+    const allNull = clients['pg']('users')
+      .batchUpdate([{ id: 1, n: null }], ['id'], ['n'])
+      .toSQL().sql;
+    expect(allNull).to.contain('?::text as "n"');
+  });
+
   it('infers bigint and honors the columnTypes override (postgres)', function () {
     const { sql } = clients['pg']('users')
       .batchUpdate([{ id: 1n, tags: ['a'] }], ['id'], ['tags'], {

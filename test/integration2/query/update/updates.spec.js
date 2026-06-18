@@ -8,6 +8,7 @@ const {
   isMysql,
   isMariaDB,
   isOracle,
+  isCockroachDB,
 } = require('../../../util/db-helpers');
 const {
   getAllDbs,
@@ -741,6 +742,121 @@ describe('Updates', function () {
               2
             );
           });
+      });
+
+      describe('batchUpdate', function () {
+        beforeEach(async () => {
+          await knex.schema.dropTableIfExists('BatchUpdate');
+          await knex.schema.createTable('BatchUpdate', (table) => {
+            table.integer('id').primary();
+            table.string('name');
+            table.integer('age');
+          });
+          await knex('BatchUpdate').insert([
+            { id: 1, name: 'old1', age: 1 },
+            { id: 2, name: 'old2', age: 2 },
+            { id: 3, name: 'decoy', age: 99 },
+          ]);
+        });
+
+        after(async () => {
+          await knex.schema.dropTableIfExists('BatchUpdate');
+        });
+
+        it('updates each row to its own values and leaves other rows untouched', async function () {
+          await knex.batchUpdate('BatchUpdate', [
+            { id: 1, name: 'new1', age: 11 },
+            { id: 2, name: 'new2', age: 22 },
+          ]);
+
+          const rows = await knex('BatchUpdate').orderBy('id');
+          expect(rows.map((r) => [r.id, r.name, Number(r.age)])).to.eql([
+            [1, 'new1', 11],
+            [2, 'new2', 22],
+            [3, 'decoy', 99], // outside the batch — must be unchanged
+          ]);
+        });
+
+        it('returns the requested columns on postgres-family dialects', async function () {
+          if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+            return this.skip();
+          }
+          const result = await knex
+            .batchUpdate('BatchUpdate', [{ id: 1, name: 'ret', age: 5 }])
+            .returning(['id', 'name']);
+          expect(result).to.eql([{ id: 1, name: 'ret' }]);
+        });
+
+        it('updates across multiple chunks', async function () {
+          await knex.batchUpdate(
+            'BatchUpdate',
+            [
+              { id: 1, name: 'c1', age: 100 },
+              { id: 2, name: 'c2', age: 200 },
+            ],
+            'id',
+            1 // one row per chunk -> two statements in one transaction
+          );
+          const rows = await knex('BatchUpdate')
+            .whereIn('id', [1, 2])
+            .orderBy('id');
+          expect(rows.map((r) => r.name)).to.eql(['c1', 'c2']);
+        });
+
+        it('supports a composite key', async function () {
+          await knex.schema.dropTableIfExists('BatchUpdateComposite');
+          await knex.schema.createTable('BatchUpdateComposite', (table) => {
+            table.integer('tenant');
+            table.integer('id');
+            table.string('name');
+            table.primary(['tenant', 'id']);
+          });
+          await knex('BatchUpdateComposite').insert([
+            { tenant: 7, id: 1, name: 'a' },
+            { tenant: 7, id: 2, name: 'b' },
+            { tenant: 8, id: 1, name: 'other-tenant' },
+          ]);
+
+          await knex.batchUpdate(
+            'BatchUpdateComposite',
+            [
+              { tenant: 7, id: 1, name: 'A' },
+              { tenant: 7, id: 2, name: 'B' },
+            ],
+            ['tenant', 'id']
+          );
+
+          const rows = await knex('BatchUpdateComposite').orderBy([
+            'tenant',
+            'id',
+          ]);
+          expect(rows.map((r) => [r.tenant, r.id, r.name])).to.eql([
+            [7, 1, 'A'],
+            [7, 2, 'B'],
+            [8, 1, 'other-tenant'], // same id, different tenant — untouched
+          ]);
+          await knex.schema.dropTableIfExists('BatchUpdateComposite');
+        });
+
+        it('rolls everything back when the caller transaction is rolled back', async function () {
+          await knex
+            .transaction(async (trx) => {
+              await knex
+                .batchUpdate('BatchUpdate', [{ id: 1, name: 'doomed', age: 0 }])
+                .transacting(trx);
+              throw new Error('force rollback');
+            })
+            .catch(() => {});
+
+          const row = await knex('BatchUpdate').where('id', 1).first();
+          expect(row.name).to.equal('old1'); // rollback reverted the update
+        });
+
+        it('validates the chunkSize parameter', function () {
+          expect(() =>
+            knex.batchUpdate('BatchUpdate', [{ id: 1, name: 'x' }], 'id', 0)
+          ).to.throw('Invalid chunkSize: 0');
+        });
       });
     });
   });

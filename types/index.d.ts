@@ -419,6 +419,15 @@ interface Knex<TRecord extends {} = any, TResult = any[]>
     chunkSize?: number
   ): Knex.BatchInsertBuilder<TRecord2, TResult2>;
 
+  batchUpdate<TRecord2 extends {} = TRecord, TResult2 = number[]>(
+    tableName: Knex.TableDescriptor,
+    data: TRecord2 extends Knex.CompositeTableType<unknown>
+      ? ReadonlyArray<Knex.ResolveTableType<TRecord2, 'update'>>
+      : ReadonlyArray<Knex.DbRecordArr<TRecord2>>,
+    key?: string | readonly string[],
+    chunkSize?: number
+  ): Knex.BatchUpdateBuilder<TRecord2, TResult2>;
+
   schema: Knex.SchemaBuilder;
   queryBuilder<
     TRecord2 extends {} = TRecord,
@@ -2204,6 +2213,44 @@ declare namespace Knex {
         ? string | readonly (string | Raw)[] | Raw
         : never
     ): BatchInsertBuilder<TRecord, TResult2>;
+  }
+
+  // Resolves to affected-row counts by default. `returning` is only honored on
+  // the Postgres family (it throws on other dialects at runtime).
+  interface BatchUpdateBuilder<TRecord extends {} = any, TResult = number[]>
+    extends Promise<ResolveResult<TResult>> {
+    transacting(trx: Transaction): this;
+    returning(
+      column: '*'
+    ): BatchUpdateBuilder<TRecord, DeferredKeySelection<TRecord, never>[]>;
+    returning<
+      TKey extends StrKey<ResolveTableType<TRecord>>,
+      TResult2 = DeferredKeySelection.Augment<
+        UnwrapArrayMember<TResult>,
+        ResolveTableType<TRecord>,
+        TKey
+      >[]
+    >(
+      column: TKey
+    ): BatchUpdateBuilder<TRecord, TResult2>;
+    returning<
+      TKey extends StrKey<ResolveTableType<TRecord>>,
+      TResult2 = DeferredKeySelection.SetSingle<
+        DeferredKeySelection.Augment<
+          UnwrapArrayMember<TResult>,
+          ResolveTableType<TRecord>,
+          TKey
+        >,
+        false
+      >[]
+    >(
+      columns: readonly TKey[]
+    ): BatchUpdateBuilder<TRecord, TResult2>;
+    returning<TResult2 = SafePartial<TRecord>[]>(
+      column: unknown extends TRecord
+        ? string | readonly (string | Raw)[] | Raw
+        : never
+    ): BatchUpdateBuilder<TRecord, TResult2>;
   }
 
   //

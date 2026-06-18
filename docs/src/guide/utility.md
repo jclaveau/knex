@@ -46,6 +46,44 @@ knex
   });
 ```
 
+## batchUpdate
+
+**knex.batchUpdate(tableName, rows, key, chunkSize)**
+
+The `batchUpdate` utility updates many rows with **different per-row values** in a single set-based statement per chunk, wrapped in a transaction _(automatically created unless explicitly given one using [transacting](/guide/query-builder#transacting))_. Each row is matched to an existing row by `key`, which defaults to `'id'` and may be an array for a composite key. The default `chunkSize` is 1000.
+
+It picks the best statement each dialect supports — `UPDATE ... FROM (SELECT ...)` on PostgreSQL/CockroachDB/Redshift/SQLite, `UPDATE ... JOIN` on MySQL/MariaDB/MSSQL, and `MERGE` on Oracle — so there is no need for per-row loops or `CASE` expressions.
+
+- **Uniform shape required.** Every row must carry the key column(s) plus the _same_ set of non-key columns. Ragged rows (a column present on some rows, absent on others) throw, because a single set-based statement applies one SET clause to all rows and a missing column would silently overwrite existing data with `NULL`. Pre-group ragged data by shape.
+- **Returns** the affected-row counts (not identities — the caller already supplies every key). [returning](/guide/query-builder#returning) is opt-in for DB-computed columns and is only honored on the PostgreSQL family; it throws on other dialects.
+- Large batches are split into chunks of `chunkSize`; keep that in mind against the SQLite (~999) and MSSQL (2100) bind-parameter limits.
+
+```js
+const rows = [
+  { id: 1, name: 'Alice', status: 'active' },
+  { id: 2, name: 'Bob', status: 'paused' },
+];
+
+// matches on the default `id` key
+knex
+  .batchUpdate('users', rows)
+  .then(function () {
+    /*...*/
+  })
+  .catch(function (error) {
+    /*...*/
+  });
+
+// composite key + an explicit chunk size, inside a caller transaction
+knex.transaction(function (tr) {
+  return knex
+    .batchUpdate('memberships', rows, ['tenant_id', 'user_id'], 500)
+    .transacting(tr);
+});
+```
+
+> On MySQL, if inserting missing rows is acceptable, [`insert(...).onConflict(...).merge()`](/guide/query-builder#onConflict) (`INSERT ... ON DUPLICATE KEY UPDATE`) is an alternative — but it is an upsert, not a pure update.
+
 ## now
 
 **knex.fn.now(precision)**

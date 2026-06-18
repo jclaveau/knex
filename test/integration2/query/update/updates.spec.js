@@ -784,7 +784,10 @@ describe('Updates', function () {
           const result = await knex
             .batchUpdate('BatchUpdate', [{ id: 1, name: 'ret', age: 5 }])
             .returning(['id', 'name']);
-          expect(result).to.eql([{ id: 1, name: 'ret' }]);
+          expect(result.length).to.equal(1);
+          expect(result[0].name).to.equal('ret');
+          // CockroachDB returns INT columns as strings
+          assertNumber(knex, result[0].id, 1);
         });
 
         it('updates across multiple chunks', async function () {

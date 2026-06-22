@@ -48,9 +48,9 @@ knex
 
 ## batchUpdate
 
-**knex.batchUpdate(tableName, rows, key, chunkSize, options)**
+**knex.batchUpdate(tableName, rows, key, options)**
 
-The `batchUpdate` utility updates many rows with **different per-row values** in a single set-based statement per chunk, wrapped in a transaction _(automatically created unless explicitly given one using [transacting](/guide/query-builder#transacting))_. Each row is matched to an existing row by `key`, which defaults to `'id'` and may be an array for a composite key. The default `chunkSize` is 1000.
+The `batchUpdate` utility updates many rows with **different per-row values** in a single set-based statement per chunk, wrapped in a transaction _(automatically created unless explicitly given one using [transacting](/guide/query-builder#transacting))_. Each row is matched to an existing row by `key`, which defaults to `'id'` and may be an array for a composite key. Behaviour is tuned through the `options` object: `chunkSize` (default 1000), `onDuplicateKey`, and `columnTypes`.
 
 It picks the best statement each dialect supports — `UPDATE ... FROM (SELECT ...)` on PostgreSQL/CockroachDB/Redshift/SQLite, `UPDATE ... JOIN` on MySQL/MariaDB/MSSQL, and `MERGE` on Oracle — so there is no need for per-row loops or `CASE` expressions.
 
@@ -79,7 +79,9 @@ knex
 // composite key + an explicit chunk size, inside a caller transaction
 knex.transaction(function (tr) {
   return knex
-    .batchUpdate('memberships', rows, ['tenant_id', 'user_id'], 500)
+    .batchUpdate('memberships', rows, ['tenant_id', 'user_id'], {
+      chunkSize: 500,
+    })
     .transacting(tr);
 });
 ```

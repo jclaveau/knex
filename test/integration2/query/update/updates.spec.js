@@ -825,7 +825,7 @@ describe('Updates', function () {
 
           // 3 rows, chunkSize 2 -> ceil(3/2) = 2 statements
           knex.on('query', onQuery);
-          await knex.batchUpdate('members', threeRows, 'id', 2);
+          await knex.batchUpdate('members', threeRows, 'id', { chunkSize: 2 });
           knex.off('query', onQuery);
           expect(statements).to.have.lengthOf(2);
 
@@ -888,7 +888,9 @@ describe('Updates', function () {
 
         it('validates the chunkSize parameter', function () {
           expect(() =>
-            knex.batchUpdate('members', [{ id: 1, name: 'x' }], 'id', 0)
+            knex.batchUpdate('members', [{ id: 1, name: 'x' }], 'id', {
+              chunkSize: 0,
+            })
           ).to.throw('Invalid chunkSize: 0');
         });
 
@@ -911,7 +913,6 @@ describe('Updates', function () {
                 { id: 1, name: 'b', age: 2 },
               ],
               'id',
-              1000,
               { onDuplicateKey: 'throw' }
             )
           ).to.throw(/duplicate key/);

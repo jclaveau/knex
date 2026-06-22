@@ -425,8 +425,8 @@ interface Knex<TRecord extends {} = any, TResult = any[]>
       ? ReadonlyArray<Knex.ResolveTableType<TRecord2, 'update'>>
       : ReadonlyArray<Knex.DbRecordArr<TRecord2>>,
     key?: string | readonly string[],
-    chunkSize?: number,
     options?: {
+      chunkSize?: number;
       onDuplicateKey?: 'last' | 'throw';
       columnTypes?: { [column: string]: string };
     }

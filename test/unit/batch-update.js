@@ -245,9 +245,9 @@ describe('batchUpdate (db-less)', function () {
     });
 
     it('rejects a bad chunkSize', function () {
-      expect(() => clients['pg'].batchUpdate('users', rows, 'id', 0)).to.throw(
-        /Invalid chunkSize/
-      );
+      expect(() =>
+        clients['pg'].batchUpdate('users', rows, 'id', { chunkSize: 0 })
+      ).to.throw(/Invalid chunkSize/);
     });
 
     it('rejects a non-array batch', function () {
@@ -264,7 +264,7 @@ describe('batchUpdate (db-less)', function () {
 
     it('rejects an invalid onDuplicateKey option', function () {
       expect(() =>
-        clients['pg'].batchUpdate('users', rows, 'id', 1000, {
+        clients['pg'].batchUpdate('users', rows, 'id', {
           onDuplicateKey: 'nope',
         })
       ).to.throw(/Invalid onDuplicateKey/);
@@ -272,7 +272,7 @@ describe('batchUpdate (db-less)', function () {
 
     it('rejects a non-object columnTypes option', function () {
       expect(() =>
-        clients['pg'].batchUpdate('users', rows, 'id', 1000, {
+        clients['pg'].batchUpdate('users', rows, 'id', {
           columnTypes: 'nope',
         })
       ).to.throw(/Invalid columnTypes/);
@@ -280,7 +280,7 @@ describe('batchUpdate (db-less)', function () {
 
     it('rejects a columnTypes value that is not a safe type name', function () {
       expect(() =>
-        clients['pg'].batchUpdate('users', rows, 'id', 1000, {
+        clients['pg'].batchUpdate('users', rows, 'id', {
           columnTypes: { name: 'text); drop table users; --' },
         })
       ).to.throw(/Invalid columnTypes\.name/);
@@ -289,7 +289,7 @@ describe('batchUpdate (db-less)', function () {
     it('accepts parameterized and array type names', function () {
       for (const type of ['text[]', 'varchar(255)', 'numeric(10, 2)']) {
         // No DB here: assert construction doesn't throw, swallow the async run.
-        const op = clients['pg'].batchUpdate('users', rows, 'id', 1000, {
+        const op = clients['pg'].batchUpdate('users', rows, 'id', {
           columnTypes: { name: type },
         });
         op.catch(() => {});

@@ -75,7 +75,7 @@ function chunksNeeded(knex, columns, rows, mode) {
   return Math.ceil(rows.length / maxRows);
 }
 
-async function timeExecution(knex, columns, rows, mode) {
+async function timeExecution(knex, columns, rows, mode, columnTypes) {
   await createTable(knex, columns);
   await knex.batchInsert('bench', rows, 500);
   const updated = rows.map((row) => {
@@ -85,10 +85,32 @@ async function timeExecution(knex, columns, rows, mode) {
     }
     return next;
   });
+  const options = columnTypes ? { mode, columnTypes } : { mode };
   const start = process.hrtime.bigint();
-  await knex.batchUpdate('bench', updated, 'id', { mode });
+  await knex.batchUpdate('bench', updated, 'id', options);
   const end = process.hrtime.bigint();
   return Number(end - start) / 1e6; // ms
+}
+
+// Isolates the cost of the columnTypes strategies. 'from_db' adds one
+// columnInfo round-trip per call; 'from_data' (the default) adds nothing.
+// Run on the 'json' strategy because it accepts columnTypes on sqlite/pg.
+async function benchColumnTypes(knex) {
+  const { columns, rows } = buildBatch(1000, 5);
+  console.log('\n## columnTypes strategy overhead (json, 1000×5)\n');
+  console.log('| columnTypes | exec ms |');
+  console.log('|---|---:|');
+  for (const columnTypes of ['from_data', 'from_db']) {
+    let ms;
+    try {
+      ms = (
+        await timeExecution(knex, columns, rows, 'json', columnTypes)
+      ).toFixed(1);
+    } catch (error) {
+      ms = `ERR: ${error.message.split(' - ').pop().slice(0, 50)}`;
+    }
+    console.log(`| ${columnTypes} | ${ms} |`);
+  }
 }
 
 async function run() {
@@ -128,6 +150,8 @@ async function run() {
       console.log(line);
     }
   }
+
+  await benchColumnTypes(knex);
 
   await knex.destroy();
 }

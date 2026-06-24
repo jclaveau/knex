@@ -827,6 +827,32 @@ describe('Updates', function () {
           );
         });
 
+        it("resolves columnTypes from the schema with 'from_db'", async function () {
+          // from_db reads types via columnInfo; exercised on the json path,
+          // which consumes columnTypes on postgres/sqlite.
+          if (!(isPostgreSQL(knex) || isSQLite(knex))) {
+            return this.skip();
+          }
+          await knex.batchUpdate(
+            'members',
+            [
+              { id: 1, name: 'fromdb1', age: 11 },
+              { id: 2, name: 'fromdb2', age: 22 },
+            ],
+            'id',
+            { mode: 'json', columnTypes: 'from_db' }
+          );
+
+          const rows = await knex('members').orderBy('id');
+          expect(rows.map((r) => [Number(r.id), r.name, Number(r.age)])).to.eql(
+            [
+              [1, 'fromdb1', 11],
+              [2, 'fromdb2', 22],
+              [3, 'decoy', 99],
+            ]
+          );
+        });
+
         it('returns the requested columns on postgres-family dialects', async function () {
           if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
             return this.skip();

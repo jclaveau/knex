@@ -445,6 +445,23 @@ describe('batchUpdate (db-less)', function () {
       }
     });
 
+    it("accepts the 'from_data' and 'from_db' columnTypes strategies", function () {
+      for (const columnTypes of ['from_data', 'from_db']) {
+        const op = clients['pg'].batchUpdate('users', rows, 'id', {
+          columnTypes,
+        });
+        op.catch(() => {});
+      }
+    });
+
+    it('rejects an unknown columnTypes string', function () {
+      expect(() =>
+        clients['pg'].batchUpdate('users', rows, 'id', {
+          columnTypes: 'from_nowhere',
+        })
+      ).to.throw(/Invalid columnTypes/);
+    });
+
     it('throws when columnTypes is used on a non-postgres dialect', function () {
       for (const client of ['mysql', 'sqlite3', 'mssql', 'oracledb']) {
         expect(() =>

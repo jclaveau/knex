@@ -9,9 +9,12 @@ on:
   push:
     branches:
       - master
+      - feat/batch-update
   pull_request:
     branches:
       - master
+      - feat/batch-update
+  workflow_dispatch:
 
 permissions:
   contents: read

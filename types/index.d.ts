@@ -427,11 +427,13 @@ interface Knex<TRecord extends {} = any, TResult = any[]>
     key?: string | readonly string[],
     options?:
       | {
-          // 'union' (default) and 'json' can take per-column DB cast types.
+          // 'union' (default) and 'json' can take per-column DB cast types:
+          // an explicit map, 'from_data' (infer from values, the default), or
+          // 'from_db' (read the schema via columnInfo).
           mode?: 'union' | 'json';
           chunkSize?: number;
           onDuplicateKey?: 'last' | 'throw';
-          columnTypes?: { [column: string]: string };
+          columnTypes?: { [column: string]: string } | 'from_data' | 'from_db';
         }
       | {
           // 'case' types values from the target column, so columnTypes can't apply.

@@ -231,6 +231,71 @@ describe('batchUpdate (db-less)', function () {
     }
   });
 
+  describe("mode: 'case'", function () {
+    it('emits one CASE per column keyed on the row, OR-expanded WHERE', function () {
+      const { sql, bindings } = clients['pg']('users')
+        .batchUpdate(rows, ['id'], ['name', 'age'], undefined, 'case')
+        .toSQL();
+      expect(sql).to.equal(
+        'update "users" set ' +
+          '"name" = case when "users"."id" = ? then ? ' +
+          'when "users"."id" = ? then ? else "name" end, ' +
+          '"age" = case when "users"."id" = ? then ? ' +
+          'when "users"."id" = ? then ? else "age" end ' +
+          'where "users"."id" = ? or "users"."id" = ?'
+      );
+      // no ::casts: values sit in assignment context, typed by the column
+      expect(sql).to.not.contain('::');
+      expect(bindings).to.eql([1, 'a', 2, 'b', 1, 10, 2, 20, 1, 2]);
+    });
+
+    it('AND-joins a composite key in both the CASE and the WHERE', function () {
+      const { sql } = clients['pg']('users')
+        .batchUpdate(
+          [{ tenant: 9, id: 1, name: 'a' }],
+          ['tenant', 'id'],
+          ['name'],
+          undefined,
+          'case'
+        )
+        .toSQL();
+      expect(sql).to.contain(
+        'when ("users"."tenant" = ? and "users"."id" = ?) then ?'
+      );
+      expect(sql).to.contain(
+        'where ("users"."tenant" = ? and "users"."id" = ?)'
+      );
+    });
+
+    it('is identical across dialects (no per-dialect form)', function () {
+      const sqlFor = (client) =>
+        clients[client]('users')
+          .batchUpdate(rows, ['id'], ['name', 'age'], undefined, 'case')
+          .toSQL()
+          .sql.replace(/["`[\]]/g, ''); // strip identifier quoting to compare
+      const pg = sqlFor('pg');
+      for (const client of ['mysql', 'sqlite3', 'oracledb', 'cockroachdb']) {
+        expect(sqlFor(client)).to.equal(pg);
+      }
+    });
+
+    it('appends @@rowcount on mssql', function () {
+      const { sql } = clients['mssql']('users')
+        .batchUpdate(rows, ['id'], ['name', 'age'], undefined, 'case')
+        .toSQL();
+      expect(sql).to.contain('select @@rowcount');
+    });
+
+    it('rejects .returning() (union only)', function () {
+      expect(() =>
+        clients['pg']('users')
+          .batchUpdate(rows, ['id'], ['name'], undefined, 'case')
+          .returning(['id'])
+          .toSQL()
+      ).to.throw(/only supported with mode 'union'/);
+    });
+  });
+
   describe('input validation', function () {
     it('rejects ragged rows (different column sets)', function () {
       expect(() =>
@@ -254,6 +319,12 @@ describe('batchUpdate (db-less)', function () {
       expect(() => clients['pg'].batchUpdate('users', 'nope')).to.throw(
         /Invalid batch/
       );
+    });
+
+    it('rejects an invalid mode', function () {
+      expect(() =>
+        clients['pg'].batchUpdate('users', rows, 'id', { mode: 'bogus' })
+      ).to.throw(/Invalid mode/);
     });
 
     it('rejects an invalid key', function () {

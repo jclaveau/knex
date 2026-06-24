@@ -780,6 +780,27 @@ describe('Updates', function () {
           );
         });
 
+        it("updates each row to its own values with mode: 'case'", async function () {
+          await knex.batchUpdate(
+            'members',
+            [
+              { id: 1, name: 'new1', age: 11 },
+              { id: 2, name: 'new2', age: 22 },
+            ],
+            'id',
+            { mode: 'case' }
+          );
+
+          const rows = await knex('members').orderBy('id');
+          expect(rows.map((r) => [Number(r.id), r.name, Number(r.age)])).to.eql(
+            [
+              [1, 'new1', 11],
+              [2, 'new2', 22],
+              [3, 'decoy', 99], // outside the batch — must be unchanged
+            ]
+          );
+        });
+
         it('returns the requested columns on postgres-family dialects', async function () {
           if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
             return this.skip();

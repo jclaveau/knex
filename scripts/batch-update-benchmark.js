@@ -7,21 +7,40 @@
 //
 // Usage:
 //   node scripts/batch-update-benchmark.js            # sqlite3, in-memory (all 3 modes)
-//   node scripts/batch-update-benchmark.js pg         # needs a reachable pg (see CONNECTIONS)
+//   DB=mysql node scripts/batch-update-benchmark.js   # any dialect, via the test
+//                                                     # connection config (needs the
+//                                                     # matching docker-compose service)
 //
-// sqlite is the default because it is the one embedded dialect that supports
-// all three strategies with no server to stand up.
+// The dialect comes from the DB env var (the same one the integration suite
+// uses) and the connection from the shared test config, so every dialect runs
+// against the same servers CI stands up. sqlite3 is the default — the one
+// embedded dialect that needs no server.
 
-const knexLib = require('../knex');
+const {
+  getKnexForDb,
+} = require('../test/integration2/util/knex-instance-provider');
 
-const CONNECTIONS = {
-  sqlite3: { connection: ':memory:', useNullAsDefault: true },
-  pg: { connection: process.env.PG_URL || 'postgres://localhost/knex_test' },
-  mysql: { connection: process.env.MYSQL_URL || 'mysql://localhost/knex_test' },
-};
-
-// Every strategy works on sqlite/pg; the others only implement a subset so far.
 const MODES = ['union', 'case', 'json'];
+
+// The JSON_TABLE / OPENJSON dialects need an explicit type per column for json
+// mode (they can't infer it); Postgres infers and SQLite is typeless, so they
+// pass no map. The bench batch is one integer key plus string columns.
+function jsonColumnTypesFor(knex, columns) {
+  const stringType = {
+    mysql: 'char(255)',
+    mssql: 'nvarchar(255)',
+    oracledb: 'varchar2(255)',
+  }[knex.client.dialect];
+  if (!stringType) {
+    return undefined;
+  }
+  const intType = knex.client.dialect === 'oracledb' ? 'number' : 'int';
+  const types = { id: intType };
+  for (const column of columns) {
+    types[column] = stringType;
+  }
+  return types;
+}
 
 const MATRIX = [
   { rows: 100, cols: 3 },
@@ -55,9 +74,15 @@ async function createTable(knex, columns) {
 
 // SQL size + parameter count for the whole batch compiled as a single statement
 // (chunking disabled), so the numbers reflect each strategy's raw growth.
-function measureStatement(knex, columns, rows, mode) {
+function measureStatement(knex, columns, rows, mode, columnTypes) {
   const compiled = knex('bench')
-    .batchUpdate(rows, ['id'], columns, undefined, mode)
+    .batchUpdate(
+      rows,
+      ['id'],
+      columns,
+      mode === 'json' ? columnTypes : undefined,
+      mode
+    )
     .toSQL();
   return { sqlBytes: compiled.sql.length, params: compiled.bindings.length };
 }
@@ -96,6 +121,14 @@ async function timeExecution(knex, columns, rows, mode, columnTypes) {
 // columnInfo round-trip per call; 'from_data' (the default) adds nothing.
 // Run on the 'json' strategy because it accepts columnTypes on sqlite/pg.
 async function benchColumnTypes(knex) {
+  // from_data / from_db only apply where types are inferred (Postgres family) or
+  // ignored (SQLite); the JSON_TABLE/OPENJSON dialects need an explicit map.
+  if (jsonColumnTypesFor(knex, [])) {
+    console.log(
+      `\n## columnTypes strategy overhead — skipped on ${knex.client.dialect} (json needs an explicit map)\n`
+    );
+    return;
+  }
   const { columns, rows } = buildBatch(1000, 5);
   console.log('\n## columnTypes strategy overhead (json, 1000×5)\n');
   console.log('| columnTypes | exec ms |');
@@ -114,12 +147,10 @@ async function benchColumnTypes(knex) {
 }
 
 async function run() {
-  const dialect = process.argv[2] || 'sqlite3';
-  const config = CONNECTIONS[dialect];
-  if (!config) {
-    throw new Error(`Unknown dialect '${dialect}'. Try: sqlite3, pg, mysql`);
-  }
-  const knex = knexLib({ client: dialect, ...config });
+  const dialect = (process.env.DB || process.argv[2] || 'sqlite3').match(
+    /[\w-]+/g
+  )[0];
+  const knex = getKnexForDb(dialect);
 
   console.log(`\n# batchUpdate strategy benchmark — ${dialect}\n`);
   console.log('| rows | cols | mode | SQL bytes | params | chunks | exec ms |');
@@ -127,6 +158,7 @@ async function run() {
 
   for (const { rows: rowCount, cols: colCount } of MATRIX) {
     const { columns, rows } = buildBatch(rowCount, colCount);
+    const jsonColumnTypes = jsonColumnTypesFor(knex, columns);
     for (const mode of MODES) {
       let line;
       try {
@@ -134,10 +166,17 @@ async function run() {
           knex,
           columns,
           rows,
-          mode
+          mode,
+          jsonColumnTypes
         );
         const chunks = chunksNeeded(knex, columns, rows, mode);
-        const ms = await timeExecution(knex, columns, rows, mode);
+        const ms = await timeExecution(
+          knex,
+          columns,
+          rows,
+          mode,
+          mode === 'json' ? jsonColumnTypes : undefined
+        );
         line = `| ${rowCount} | ${colCount} | ${mode} | ${sqlBytes} | ${params} | ${chunks} | ${ms.toFixed(
           1
         )} |`;

@@ -424,6 +424,24 @@ describe('batchUpdate (db-less)', function () {
       }
     });
 
+    it('rejects an oracle json chunk whose payload exceeds the 4000-byte bind limit', function () {
+      const wide = [];
+      for (let id = 1; id <= 200; id++) {
+        wide.push({ id, name: `name-value-${id}` });
+      }
+      expect(() =>
+        clients['oracledb']('users')
+          .batchUpdate(
+            wide,
+            ['id'],
+            ['name'],
+            { id: 'number', name: 'varchar2(50)' },
+            'json'
+          )
+          .toSQL()
+      ).to.throw(/exceeds Oracle's 4000-byte bind limit/);
+    });
+
     it('throws on dialects without a json-rowset function', function () {
       expect(() =>
         clients['redshift']('users')
@@ -554,7 +572,7 @@ describe('batchUpdate (db-less)', function () {
         mysql: 65535,
         oracledb: 65535,
         sqlite3: 32766,
-        mssql: 2100,
+        mssql: 2098,
       };
       for (const [client, limit] of Object.entries(expected)) {
         expect(clients[client].client.maxBindParameters).to.equal(limit);

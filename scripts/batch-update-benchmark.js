@@ -29,12 +29,12 @@ function jsonColumnTypesFor(knex, columns) {
   const stringType = {
     mysql: 'char(255)',
     mssql: 'nvarchar(255)',
-    oracledb: 'varchar2(255)',
+    oracle: 'varchar2(255)',
   }[knex.client.dialect];
   if (!stringType) {
     return undefined;
   }
-  const intType = knex.client.dialect === 'oracledb' ? 'number' : 'int';
+  const intType = knex.client.dialect === 'oracle' ? 'number' : 'int';
   const types = { id: intType };
   for (const column of columns) {
     types[column] = stringType;
@@ -102,7 +102,14 @@ function chunksNeeded(knex, columns, rows, mode) {
 
 async function timeExecution(knex, columns, rows, mode, columnTypes) {
   await createTable(knex, columns);
-  await knex.batchInsert('bench', rows, 500);
+  // Size the seed insert to the dialect's bind limit (mssql caps at 2100), so
+  // table setup never overflows before the batchUpdate under test runs.
+  const limit = knex.client.maxBindParameters || Infinity;
+  const insertChunk = Math.max(
+    1,
+    Math.min(500, Math.floor(limit / (columns.length + 1)))
+  );
+  await knex.batchInsert('bench', rows, insertChunk);
   const updated = rows.map((row) => {
     const next = { id: row.id };
     for (const column of columns) {

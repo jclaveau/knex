@@ -103,7 +103,7 @@ describe('batchUpdate (db-less)', function () {
       .batchUpdate(rows, ['id'], ['name', 'age'])
       .toSQL();
     expect(sql).to.equal(
-      'merge into "users" tgt using (select ? "id", ? "name", ? "age" from dual ' +
+      'merge into "users" "tgt" using (select ? "id", ? "name", ? "age" from dual ' +
         'union all select ?, ?, ? from dual) "v" on ("tgt"."id" = "v"."id") ' +
         'when matched then update set "tgt"."name" = "v"."name", ' +
         '"tgt"."age" = "v"."age"'
@@ -399,7 +399,7 @@ describe('batchUpdate (db-less)', function () {
         )
         .toSQL();
       expect(sql).to.equal(
-        'merge into "users" tgt using (select * from json_table(?, ' +
+        'merge into "users" "tgt" using (select * from json_table(?, ' +
           "'$[*]' columns (\"id\" number path '$.id', " +
           '"name" varchar2(50) path \'$.name\', "age" number path \'$.age\'))) ' +
           '"v" on ("tgt"."id" = "v"."id") when matched then update set ' +

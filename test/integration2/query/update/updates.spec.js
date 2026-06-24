@@ -7,6 +7,7 @@ const {
   isPostgreSQL,
   isMysql,
   isMariaDB,
+  isMssql,
   isOracle,
   isCockroachDB,
   isSQLite,
@@ -803,9 +804,27 @@ describe('Updates', function () {
         });
 
         it("updates each row to its own values with mode: 'json'", async function () {
-          // json mode is implemented for postgres and sqlite in this PR
-          if (!(isPostgreSQL(knex) || isSQLite(knex))) {
-            return this.skip();
+          // Postgres/CockroachDB (jsonb_to_recordset) infer types and SQLite is
+          // typeless; the JSON_TABLE/OPENJSON dialects need an explicit map.
+          const options = { mode: 'json' };
+          if (isMysql(knex)) {
+            options.columnTypes = {
+              id: 'signed',
+              name: 'char(255)',
+              age: 'signed',
+            };
+          } else if (isMssql(knex)) {
+            options.columnTypes = {
+              id: 'int',
+              name: 'nvarchar(255)',
+              age: 'int',
+            };
+          } else if (isOracle(knex)) {
+            options.columnTypes = {
+              id: 'number',
+              name: 'varchar2(255)',
+              age: 'number',
+            };
           }
           await knex.batchUpdate(
             'members',
@@ -814,7 +833,7 @@ describe('Updates', function () {
               { id: 2, name: 'new2', age: 22 },
             ],
             'id',
-            { mode: 'json' }
+            options
           );
 
           const rows = await knex('members').orderBy('id');

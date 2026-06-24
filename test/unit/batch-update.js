@@ -348,8 +348,68 @@ describe('batchUpdate (db-less)', function () {
       );
     });
 
-    it('throws on dialects without a json-rowset function', function () {
-      for (const client of ['mysql', 'mssql', 'oracledb', 'redshift']) {
+    it('mysql expands one JSON param via JSON_TABLE with a typed COLUMNS list', function () {
+      const { sql, bindings } = clients['mysql']('users')
+        .batchUpdate(
+          [{ id: 1, name: 'a', age: 10 }],
+          ['id'],
+          ['name', 'age'],
+          { id: 'signed', name: 'char(50)', age: 'signed' },
+          'json'
+        )
+        .toSQL();
+      expect(sql).to.equal(
+        'update `users` inner join json_table(?, ' +
+          "'$[*]' columns (`id` signed path '$.id', " +
+          "`name` char(50) path '$.name', `age` signed path '$.age')) " +
+          'as `src` on `users`.`id` = `src`.`id` ' +
+          'set `users`.`name` = `src`.`name`, `users`.`age` = `src`.`age`'
+      );
+      expect(bindings).to.have.lengthOf(1);
+      expect(JSON.parse(bindings[0])).to.eql([{ id: 1, name: 'a', age: 10 }]);
+    });
+
+    it('mssql expands one JSON param via OPENJSON ... WITH and keeps the @@rowcount tail', function () {
+      const { sql, bindings } = clients['mssql']('users')
+        .batchUpdate(
+          [{ id: 1, name: 'a', age: 10 }],
+          ['id'],
+          ['name', 'age'],
+          { id: 'int', name: 'nvarchar(50)', age: 'int' },
+          'json'
+        )
+        .toSQL();
+      expect(sql).to.equal(
+        'update [users] set [name] = [src].[name], [age] = [src].[age] ' +
+          'from openjson(?) with ([id] int \'$.id\', ' +
+          "[name] nvarchar(50) '$.name', [age] int '$.age') as [src] " +
+          'where [users].[id] = [src].[id];select @@rowcount'
+      );
+      expect(bindings).to.have.lengthOf(1);
+    });
+
+    it('oracle expands one JSON param via JSON_TABLE inside a MERGE', function () {
+      const { sql, bindings } = clients['oracledb']('users')
+        .batchUpdate(
+          [{ id: 1, name: 'a', age: 10 }],
+          ['id'],
+          ['name', 'age'],
+          { id: 'number', name: 'varchar2(50)', age: 'number' },
+          'json'
+        )
+        .toSQL();
+      expect(sql).to.equal(
+        'merge into "users" tgt using (select * from json_table(?, ' +
+          '\'$[*]\' columns ("id" number path \'$.id\', ' +
+          '"name" varchar2(50) path \'$.name\', "age" number path \'$.age\'))) ' +
+          '"v" on ("tgt"."id" = "v"."id") when matched then update set ' +
+          '"tgt"."name" = "v"."name", "tgt"."age" = "v"."age"'
+      );
+      expect(bindings).to.have.lengthOf(1);
+    });
+
+    it('requires an explicit columnTypes map for JSON_TABLE/OPENJSON dialects', function () {
+      for (const client of ['mysql', 'mssql', 'oracledb']) {
         expect(() =>
           clients[client]('users')
             .batchUpdate(
@@ -360,8 +420,16 @@ describe('batchUpdate (db-less)', function () {
               'json'
             )
             .toSQL()
-        ).to.throw(/'json' is not supported/);
+        ).to.throw(/needs an explicit columnTypes map/);
       }
+    });
+
+    it('throws on dialects without a json-rowset function', function () {
+      expect(() =>
+        clients['redshift']('users')
+          .batchUpdate([{ id: 1, name: 'a' }], ['id'], ['name'], undefined, 'json')
+          .toSQL()
+      ).to.throw(/'json' is not supported/);
     });
   });
 

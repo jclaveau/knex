@@ -2,7 +2,7 @@
 name: batchUpdate Benchmark
 
 # Informational only — compares the batchUpdate strategies (union / case / json)
-# on every build and writes the table to the run summary. It never gates the
+# on every build and writes the tables to the run summary. It never gates the
 # build: CI runners are noisy, so the absolute timings are indicative, not a
 # regression gate. Run locally for accurate numbers (see scripts/).
 on:
@@ -21,7 +21,22 @@ jobs:
     if: >-
       ${{ !contains(github.event.pull_request.labels.*.name, 'skip-tests') }}
     runs-on: ubuntu-latest
-    name: batchUpdate Benchmark (sqlite)
+    name: batchUpdate Benchmark (sqlite + pg)
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: knex_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - name: Checkout Repository
@@ -51,7 +66,16 @@ jobs:
 
       - run: npm run build
 
-      # sqlite is the one embedded dialect that runs all three strategies, so
-      # it needs no service container. Tee to the step summary for visibility.
-      - name: Run batchUpdate benchmark
+      # sqlite is the one embedded dialect that runs all three strategies, so it
+      # needs no service. Tee to the step summary for visibility.
+      - name: Run batchUpdate benchmark (sqlite)
         run: node scripts/batch-update-benchmark.js | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # pg additionally exercises the json typed-column path and from_db (a real
+      # columnInfo round-trip). continue-on-error so a flaky service never reds
+      # the build — this workflow is informational.
+      - name: Run batchUpdate benchmark (pg)
+        continue-on-error: true
+        env:
+          PG_URL: postgres://postgres:postgres@localhost:5432/knex_test
+        run: node scripts/batch-update-benchmark.js pg | tee -a "$GITHUB_STEP_SUMMARY"

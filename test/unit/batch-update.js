@@ -296,6 +296,75 @@ describe('batchUpdate (db-less)', function () {
     });
   });
 
+  describe("mode: 'json'", function () {
+    it('postgres expands one jsonb param via jsonb_to_recordset with typed columns', function () {
+      const threeRows = [
+        { id: 1, name: 'a', age: 10 },
+        { id: 2, name: 'b', age: 20 },
+        { id: 3, name: 'c', age: 30 },
+      ];
+      const { sql, bindings } = clients['pg']('users')
+        .batchUpdate(threeRows, ['id'], ['name', 'age'], undefined, 'json')
+        .toSQL();
+      expect(sql).to.equal(
+        'update "users" set "name" = "v"."name", "age" = "v"."age" ' +
+          'from jsonb_to_recordset(?) as "v"' +
+          '("id" numeric, "name" text, "age" numeric) ' +
+          'where "users"."id" = "v"."id"'
+      );
+      // one parameter for the WHOLE chunk regardless of row count
+      expect(bindings).to.have.lengthOf(1);
+      expect(JSON.parse(bindings[0])).to.eql(threeRows);
+    });
+
+    it('honors columnTypes in the json column-definition list (postgres)', function () {
+      const { sql } = clients['pg']('users')
+        .batchUpdate(
+          [{ id: 1, tags: ['a'] }],
+          ['id'],
+          ['tags'],
+          { tags: 'text[]' },
+          'json'
+        )
+        .toSQL();
+      expect(sql).to.contain('"tags" text[]');
+    });
+
+    it('sqlite expands json_each into an UPDATE ... FROM source', function () {
+      const { sql } = clients['sqlite3']('users')
+        .batchUpdate(
+          [{ id: 1, name: 'a' }],
+          ['id'],
+          ['name'],
+          undefined,
+          'json'
+        )
+        .toSQL();
+      expect(sql).to.equal(
+        'update `users` set `name` = `v`.`name` from ' +
+          '(select json_extract(value, ?) as `id`, ' +
+          'json_extract(value, ?) as `name` from json_each(?)) as `v` ' +
+          'where `users`.`id` = `v`.`id`'
+      );
+    });
+
+    it('throws on dialects without a json-rowset function', function () {
+      for (const client of ['mysql', 'mssql', 'oracledb', 'redshift']) {
+        expect(() =>
+          clients[client]('users')
+            .batchUpdate(
+              [{ id: 1, name: 'a' }],
+              ['id'],
+              ['name'],
+              undefined,
+              'json'
+            )
+            .toSQL()
+        ).to.throw(/'json' is not supported/);
+      }
+    });
+  });
+
   describe('input validation', function () {
     it('rejects ragged rows (different column sets)', function () {
       expect(() =>

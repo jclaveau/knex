@@ -9,6 +9,7 @@ const {
   isMariaDB,
   isOracle,
   isCockroachDB,
+  isSQLite,
 } = require('../../../util/db-helpers');
 const {
   getAllDbs,
@@ -789,6 +790,31 @@ describe('Updates', function () {
             ],
             'id',
             { mode: 'case' }
+          );
+
+          const rows = await knex('members').orderBy('id');
+          expect(rows.map((r) => [Number(r.id), r.name, Number(r.age)])).to.eql(
+            [
+              [1, 'new1', 11],
+              [2, 'new2', 22],
+              [3, 'decoy', 99], // outside the batch — must be unchanged
+            ]
+          );
+        });
+
+        it("updates each row to its own values with mode: 'json'", async function () {
+          // json mode is implemented for postgres and sqlite in this PR
+          if (!(isPostgreSQL(knex) || isSQLite(knex))) {
+            return this.skip();
+          }
+          await knex.batchUpdate(
+            'members',
+            [
+              { id: 1, name: 'new1', age: 11 },
+              { id: 2, name: 'new2', age: 22 },
+            ],
+            'id',
+            { mode: 'json' }
           );
 
           const rows = await knex('members').orderBy('id');

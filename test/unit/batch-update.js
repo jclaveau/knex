@@ -390,6 +390,15 @@ describe('batchUpdate (db-less)', function () {
       );
     });
 
+    it("rejects columnTypes in 'case' mode (nothing to cast)", function () {
+      expect(() =>
+        clients['pg'].batchUpdate('users', rows, 'id', {
+          mode: 'case',
+          columnTypes: { name: 'text' },
+        })
+      ).to.throw(/columnTypes has no effect in 'case' mode/);
+    });
+
     it('rejects an invalid mode', function () {
       expect(() =>
         clients['pg'].batchUpdate('users', rows, 'id', { mode: 'bogus' })

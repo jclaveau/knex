@@ -425,11 +425,20 @@ interface Knex<TRecord extends {} = any, TResult = any[]>
       ? ReadonlyArray<Knex.ResolveTableType<TRecord2, 'update'>>
       : ReadonlyArray<Knex.DbRecordArr<TRecord2>>,
     key?: string | readonly string[],
-    options?: {
-      chunkSize?: number;
-      onDuplicateKey?: 'last' | 'throw';
-      columnTypes?: { [column: string]: string };
-    }
+    options?:
+      | {
+          // 'union' (default) and 'json' can take per-column DB cast types.
+          chunkSize?: number;
+          onDuplicateKey?: 'last' | 'throw';
+          mode?: 'union' | 'json';
+          columnTypes?: { [column: string]: string };
+        }
+      | {
+          // 'case' types values from the target column, so columnTypes can't apply.
+          chunkSize?: number;
+          onDuplicateKey?: 'last' | 'throw';
+          mode: 'case';
+        }
   ): Knex.BatchUpdateBuilder<TRecord2, TResult2>;
 
   schema: Knex.SchemaBuilder;

@@ -381,7 +381,7 @@ describe('batchUpdate (db-less)', function () {
         .toSQL();
       expect(sql).to.equal(
         'update [users] set [name] = [src].[name], [age] = [src].[age] ' +
-          'from openjson(?) with ([id] int \'$.id\', ' +
+          "from openjson(?) with ([id] int '$.id', " +
           "[name] nvarchar(50) '$.name', [age] int '$.age') as [src] " +
           'where [users].[id] = [src].[id];select @@rowcount'
       );
@@ -400,7 +400,7 @@ describe('batchUpdate (db-less)', function () {
         .toSQL();
       expect(sql).to.equal(
         'merge into "users" tgt using (select * from json_table(?, ' +
-          '\'$[*]\' columns ("id" number path \'$.id\', ' +
+          "'$[*]' columns (\"id\" number path '$.id', " +
           '"name" varchar2(50) path \'$.name\', "age" number path \'$.age\'))) ' +
           '"v" on ("tgt"."id" = "v"."id") when matched then update set ' +
           '"tgt"."name" = "v"."name", "tgt"."age" = "v"."age"'
@@ -427,7 +427,13 @@ describe('batchUpdate (db-less)', function () {
     it('throws on dialects without a json-rowset function', function () {
       expect(() =>
         clients['redshift']('users')
-          .batchUpdate([{ id: 1, name: 'a' }], ['id'], ['name'], undefined, 'json')
+          .batchUpdate(
+            [{ id: 1, name: 'a' }],
+            ['id'],
+            ['name'],
+            undefined,
+            'json'
+          )
           .toSQL()
       ).to.throw(/'json' is not supported/);
     });

@@ -428,16 +428,16 @@ interface Knex<TRecord extends {} = any, TResult = any[]>
     options?:
       | {
           // 'union' (default) and 'json' can take per-column DB cast types.
+          mode?: 'union' | 'json';
           chunkSize?: number;
           onDuplicateKey?: 'last' | 'throw';
-          mode?: 'union' | 'json';
           columnTypes?: { [column: string]: string };
         }
       | {
           // 'case' types values from the target column, so columnTypes can't apply.
+          mode: 'case';
           chunkSize?: number;
           onDuplicateKey?: 'last' | 'throw';
-          mode: 'case';
         }
   ): Knex.BatchUpdateBuilder<TRecord2, TResult2>;
 

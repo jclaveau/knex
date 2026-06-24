@@ -809,9 +809,9 @@ describe('Updates', function () {
           const options = { mode: 'json' };
           if (isMysql(knex)) {
             options.columnTypes = {
-              id: 'signed',
+              id: 'int',
               name: 'char(255)',
-              age: 'signed',
+              age: 'int',
             };
           } else if (isMssql(knex)) {
             options.columnTypes = {

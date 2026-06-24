@@ -354,14 +354,14 @@ describe('batchUpdate (db-less)', function () {
           [{ id: 1, name: 'a', age: 10 }],
           ['id'],
           ['name', 'age'],
-          { id: 'signed', name: 'char(50)', age: 'signed' },
+          { id: 'int', name: 'char(50)', age: 'int' },
           'json'
         )
         .toSQL();
       expect(sql).to.equal(
         'update `users` inner join json_table(?, ' +
-          "'$[*]' columns (`id` signed path '$.id', " +
-          "`name` char(50) path '$.name', `age` signed path '$.age')) " +
+          "'$[*]' columns (`id` int path '$.id', " +
+          "`name` char(50) path '$.name', `age` int path '$.age')) " +
           'as `src` on `users`.`id` = `src`.`id` ' +
           'set `users`.`name` = `src`.`name`, `users`.`age` = `src`.`age`'
       );

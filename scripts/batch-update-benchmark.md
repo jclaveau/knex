@@ -57,6 +57,37 @@ node scripts/batch-update-benchmark.js pg         # set PG_URL
 - **case hits expression-depth limits too** (`SQLITE_MAX_EXPR_DEPTH`), so it is
   not a free "universal" escape hatch for large batches either.
 
+## Measured — PostgreSQL (CI service, postgres:16)
+
+Postgres has no small compound-SELECT cap, so `union` runs at every size here —
+which lets the three be compared head to head.
+
+| rows×cols | mode  | SQL bytes | params | exec ms |
+| --------- | ----- | --------: | -----: | ------: |
+| 1000×3    | union |    28,161 |  4,000 |      36 |
+| 1000×3    | case  |   107,101 |  7,000 |      59 |
+| 1000×3    | json  |       179 |  **1** |   **8** |
+| 1000×20   | union |    79,718 | 21,000 |      98 |
+| 1000×20   | case  |   600,580 | 41,000 |     272 |
+| 1000×20   | json  |       685 |  **1** |  **21** |
+| 10000×3   | union |   280,161 | 40,000 |     289 |
+| 10000×3   | case  | 1,070,101 | 70,000 |   1,201 |
+| 10000×3   | json  |       179 |  **1** |  **77** |
+
+`columnTypes` overhead (pg, json, 1000×5): `from_data` 9.2ms, `from_db` 16.7ms.
+
+Postgres findings:
+
+- **json wins decisively** — one bound parameter and a flat ~179-byte statement
+  regardless of size; ~3.7× faster than `union` and ~16× faster than `case` at
+  10000×3. (Note: pg json binds **1** param vs sqlite's 5 — sqlite also binds the
+  `json_extract` path strings.)
+- **union is solid on pg** (no compound-SELECT limit) but grows linearly — 280KB
+  / 40k params at 10000×3.
+- **case is the slowest everywhere** and the largest by far (1MB at 10000×3).
+- **`from_db` costs a real round-trip on pg** (~7.5ms, ~80% over `from_data`
+  here) — fine as an opt-in, never something to put on the default path.
+
 ## columnTypes strategies (union + json)
 
 `columnTypes` decides where the per-column DB types come from (used by `union`'s

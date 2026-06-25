@@ -2,15 +2,15 @@
 
 // Renders the batchUpdate benchmark numbers as committed SVG charts for the PR /
 // report — log-log scaling curves where Mermaid can't (no legend, stroke styles,
-// or log axes). One graph per dialect gathers all six curves (exec ms + bound
-// params × the three modes), plus a faceted exec-ms overview across dialects.
+// or log axes). One graph per dialect gathers all nine curves (exec ms + bound
+// params + chunks × the three modes), plus a faceted exec-ms overview.
 //
 // No repo dependency: run it with vega/vega-lite supplied by npx, e.g.
 //   npx --yes -p vega@5 -p vega-lite@5 node scripts/batch-update-charts.js \
 //     scripts/bench-charts/data.json scripts/bench-charts
 //
 // Input JSON: an array of { dialect, results: [ { rowCount, colCount, mode, ms,
-// params, sqlBytes } ] } — concatenate each dialect's `batch-update-bench-json`
+// params, chunks, sqlBytes } ] } — concatenate each dialect's `batch-update-bench-json`
 // block (from the benchmark output / CI logs) into one array.
 
 const fs = require('fs');
@@ -40,10 +40,10 @@ function loadRecords(dataPath) {
   return records;
 }
 
-// One graph per dialect gathering every curve: exec ms AND bound params for all
-// three modes (6 curves). color = mode, stroke-dash + point shape = metric, on a
-// shared log y-axis (both are "lower is better"). `detail` keeps each (mode,
-// metric) a separate line.
+// One graph per dialect gathering every curve: exec ms, bound params and chunk
+// count for all three modes (9 curves). color = mode, stroke-dash + point shape =
+// metric, on a shared log y-axis (all three are "lower is better"). `detail`
+// keeps each (mode, metric) a separate line.
 function dialectSpec({ dialect, values }) {
   return {
     $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
@@ -64,7 +64,7 @@ function dialectSpec({ dialect, values }) {
         field: 'value',
         type: 'quantitative',
         scale: { type: 'log' },
-        title: 'exec ms / bound params (log)',
+        title: 'exec ms / bound params / chunks (log)',
       },
       color: {
         field: 'mode',
@@ -89,6 +89,12 @@ function toLongForm(records) {
       mode: r.mode,
       metric: 'bound params',
       value: r.params,
+    });
+    long.push({
+      rows: r.rows,
+      mode: r.mode,
+      metric: 'chunks',
+      value: r.chunks,
     });
   }
   return long;

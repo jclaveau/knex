@@ -232,7 +232,7 @@ describe('batchUpdate (db-less)', function () {
   });
 
   describe("mode: 'case'", function () {
-    it('emits one CASE per column keyed on the row, OR-expanded WHERE', function () {
+    it('emits one CASE per column keyed on the row, IN-list WHERE', function () {
       const { sql, bindings } = clients['pg']('users')
         .batchUpdate(rows, ['id'], ['name', 'age'], undefined, 'case')
         .toSQL();
@@ -242,7 +242,7 @@ describe('batchUpdate (db-less)', function () {
           'when "users"."id" = ? then ? else "name" end, ' +
           '"age" = case when "users"."id" = ? then ? ' +
           'when "users"."id" = ? then ? else "age" end ' +
-          'where "users"."id" = ? or "users"."id" = ?'
+          'where "users"."id" in (?, ?)'
       );
       // no ::casts: values sit in assignment context, typed by the column
       expect(sql).to.not.contain('::');

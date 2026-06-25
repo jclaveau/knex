@@ -399,12 +399,13 @@ describe('batchUpdate (db-less)', function () {
         )
         .toSQL();
       expect(sql).to.equal(
-        'merge into "users" "tgt" using (select * from json_table(?, ' +
+        'merge into "users" "tgt" using (select * from json_table(to_clob(?), ' +
           "'$[*]' columns (\"id\" number path '$.id', " +
           '"name" varchar2(50) path \'$.name\', "age" number path \'$.age\'))) ' +
           '"v" on ("tgt"."id" = "v"."id") when matched then update set ' +
           '"tgt"."name" = "v"."name", "tgt"."age" = "v"."age"'
       );
+      // small payload -> a single to_clob(?) piece
       expect(bindings).to.have.lengthOf(1);
     });
 
@@ -424,22 +425,32 @@ describe('batchUpdate (db-less)', function () {
       }
     });
 
-    it('rejects an oracle json chunk whose payload exceeds the 4000-byte bind limit', function () {
+    it('splits a large oracle json payload into concatenated to_clob binds', function () {
+      // > 4000 bytes of JSON: Oracle would bind that as LONG (ORA-01461), so the
+      // payload is split into <=4000-byte VARCHAR2 pieces rebuilt as a CLOB via
+      // to_clob(?) || to_clob(?) ... — JSON_TABLE accepts the CLOB.
       const wide = [];
-      for (let id = 1; id <= 200; id++) {
+      for (let id = 1; id <= 400; id++) {
         wide.push({ id, name: `name-value-${id}` });
       }
-      expect(() =>
-        clients['oracledb']('users')
-          .batchUpdate(
-            wide,
-            ['id'],
-            ['name'],
-            { id: 'number', name: 'varchar2(50)' },
-            'json'
-          )
-          .toSQL()
-      ).to.throw(/exceeds Oracle's 4000-byte bind limit/);
+      const { sql, bindings } = clients['oracledb']('users')
+        .batchUpdate(
+          wide,
+          ['id'],
+          ['name'],
+          { id: 'number', name: 'varchar2(50)' },
+          'json'
+        )
+        .toSQL();
+      expect(sql).to.contain('to_clob(?) || to_clob(?)');
+      expect(sql).to.contain('json_table(to_clob(?)');
+      // multiple pieces, each under the 4000-byte VARCHAR2 limit
+      expect(bindings.length).to.be.greaterThan(1);
+      for (const piece of bindings) {
+        expect(Buffer.byteLength(piece)).to.be.at.most(4000);
+      }
+      // the pieces concatenate back to the exact JSON payload
+      expect(JSON.parse(bindings.join(''))).to.eql(wide);
     });
 
     it('throws on dialects without a json-rowset function', function () {

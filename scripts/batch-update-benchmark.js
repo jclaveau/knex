@@ -174,6 +174,7 @@ async function run() {
   console.log('| rows | cols | mode | SQL bytes | params | chunks | exec ms |');
   console.log('|---:|---:|---|---:|---:|---:|---:|');
 
+  const results = [];
   for (const { rows: rowCount, cols: colCount } of MATRIX) {
     const { columns, rows } = buildBatch(rowCount, colCount);
     const jsonColumnTypes = jsonColumnTypesFor(knex, columns);
@@ -195,6 +196,15 @@ async function run() {
           mode,
           mode === 'json' ? jsonColumnTypes : undefined
         );
+        results.push({
+          rowCount,
+          colCount,
+          mode,
+          sqlBytes,
+          params,
+          chunks,
+          ms,
+        });
         line = `| ${rowCount} | ${colCount} | ${mode} | ${sqlBytes} | ${params} | ${chunks} | ${ms.toFixed(
           1
         )} |`;
@@ -202,15 +212,56 @@ async function run() {
         // Surface the limit that was hit (e.g. SQLite's compound-SELECT cap)
         // without dumping the multi-KB statement the driver echoes back.
         const reason = error.message.split(' - ').pop().slice(0, 60);
+        results.push({ rowCount, colCount, mode, error: reason });
         line = `| ${rowCount} | ${colCount} | ${mode} | — | — | — | ERR: ${reason} |`;
       }
       console.log(line);
     }
   }
 
+  printModeCharts(dialect, results);
   await benchColumnTypes(knex);
 
   await knex.destroy();
+}
+
+// Per-size bar charts comparing the modes, as Mermaid xychart-beta blocks that
+// GitHub renders inline. One chart per (metric, size): x-axis is the mode, so
+// the bars are self-labelled (xychart-beta has no series legend). A mode that
+// errored shows as 0 (its ERR is in the table above). Metrics use their own
+// chart because their ranges differ by orders of magnitude.
+function printModeCharts(dialect, results) {
+  const sizes = [];
+  for (const r of results) {
+    const size = `${r.rowCount}x${r.colCount}`;
+    if (!sizes.includes(size)) sizes.push(size);
+  }
+  const metrics = [
+    { key: 'ms', label: 'exec ms', round: (v) => Math.round(v) },
+    { key: 'params', label: 'bound params', round: (v) => v },
+    { key: 'sqlBytes', label: 'SQL bytes', round: (v) => v },
+  ];
+  console.log('\n## mode comparison (charts)\n');
+  for (const size of sizes) {
+    for (const metric of metrics) {
+      const values = MODES.map((mode) => {
+        const cell = results.find(
+          (r) => `${r.rowCount}x${r.colCount}` === size && r.mode === mode
+        );
+        return cell && cell[metric.key] != null
+          ? metric.round(cell[metric.key])
+          : 0;
+      });
+      console.log('```mermaid');
+      console.log('xychart-beta');
+      console.log(`  title "${dialect} ${size} — ${metric.label} by mode"`);
+      console.log(`  x-axis [${MODES.join(', ')}]`);
+      console.log(`  y-axis "${metric.label}"`);
+      console.log(`  bar [${values.join(', ')}]`);
+      console.log('```');
+      console.log('');
+    }
+  }
 }
 
 run().catch((error) => {

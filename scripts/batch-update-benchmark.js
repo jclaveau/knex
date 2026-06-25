@@ -47,6 +47,12 @@ const MATRIX = [
   { rows: 1000, cols: 3 },
   { rows: 1000, cols: 20 },
   { rows: 10000, cols: 3 },
+  // Heavy tier to exercise the chunk loop where a per-statement cap bites:
+  // ~100 chunks for union on SQLite (500-term cap) and MSSQL (2098 params / 4
+  // per row). High-bind-limit dialects (65535) still take far more rows to chunk
+  // union, so they show only a handful here — that's expected. cols stays at 3
+  // so the case/json payloads don't balloon at this row count.
+  { rows: 50000, cols: 3 },
 ];
 
 function buildBatch(rowCount, colCount) {

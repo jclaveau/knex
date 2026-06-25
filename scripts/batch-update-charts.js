@@ -2,8 +2,8 @@
 
 // Renders the batchUpdate benchmark numbers as committed SVG charts for the PR /
 // report — log-log scaling curves where Mermaid can't (no legend, stroke styles,
-// or log axes). One curve per mode (color + stroke-dash + point shape), per
-// dialect, plus a faceted overview across dialects.
+// or log axes). One graph per dialect gathers all six curves (exec ms + bound
+// params × the three modes), plus a faceted exec-ms overview across dialects.
 //
 // No repo dependency: run it with vega/vega-lite supplied by npx, e.g.
 //   npx --yes -p vega@5 -p vega-lite@5 node scripts/batch-update-charts.js \
@@ -40,15 +40,16 @@ function loadRecords(dataPath) {
   return records;
 }
 
-// Scaling curve: x=rows (log), y=<metric> (log), one line per mode (color +
-// stroke-dash + point shape). cols held at 3 so a single line per mode is a
-// clean row-count sweep.
-function metricSpec({ title, field, axisTitle, values }) {
+// One graph per dialect gathering every curve: exec ms AND bound params for all
+// three modes (6 curves). color = mode, stroke-dash + point shape = metric, on a
+// shared log y-axis (both are "lower is better"). `detail` keeps each (mode,
+// metric) a separate line.
+function dialectSpec({ dialect, values }) {
   return {
     $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
-    title,
-    width: 460,
-    height: 300,
+    title: `${dialect} — batchUpdate cost vs rows (cols=3, log-log)`,
+    width: 520,
+    height: 340,
     background: 'white',
     data: { values },
     mark: { type: 'line', point: { size: 70, filled: true }, strokeWidth: 2 },
@@ -60,10 +61,10 @@ function metricSpec({ title, field, axisTitle, values }) {
         title: 'rows (log)',
       },
       y: {
-        field,
+        field: 'value',
         type: 'quantitative',
         scale: { type: 'log' },
-        title: axisTitle,
+        title: 'exec ms / bound params (log)',
       },
       color: {
         field: 'mode',
@@ -71,10 +72,26 @@ function metricSpec({ title, field, axisTitle, values }) {
         sort: MODE_ORDER,
         title: 'mode',
       },
-      strokeDash: { field: 'mode', type: 'nominal', sort: MODE_ORDER },
-      shape: { field: 'mode', type: 'nominal', sort: MODE_ORDER },
+      strokeDash: { field: 'metric', type: 'nominal', title: 'metric' },
+      shape: { field: 'metric', type: 'nominal', title: 'metric' },
+      detail: { field: 'metric', type: 'nominal' },
     },
   };
+}
+
+// Long-form rows for the combined chart: one record per (mode, metric, rows).
+function toLongForm(records) {
+  const long = [];
+  for (const r of records) {
+    long.push({ rows: r.rows, mode: r.mode, metric: 'exec ms', value: r.ms });
+    long.push({
+      rows: r.rows,
+      mode: r.mode,
+      metric: 'bound params',
+      value: r.params,
+    });
+  }
+  return long;
 }
 
 async function toSvg(vlSpec) {
@@ -92,23 +109,11 @@ async function main() {
   const dialects = [...new Set(sweep.map((r) => r.dialect))];
 
   for (const dialect of dialects) {
-    const values = sweep.filter((r) => r.dialect === dialect);
-    for (const metric of [
-      { field: 'ms', axisTitle: 'exec ms (log)', suffix: 'ms' },
-      { field: 'params', axisTitle: 'bound params (log)', suffix: 'params' },
-    ]) {
-      const svg = await toSvg(
-        metricSpec({
-          title: `${dialect} — batchUpdate ${metric.field} vs rows (cols=3)`,
-          field: metric.field,
-          axisTitle: metric.axisTitle,
-          values,
-        })
-      );
-      const file = path.join(outDir, `${dialect}-${metric.suffix}.svg`);
-      fs.writeFileSync(file, svg);
-      console.log(`wrote ${file}`);
-    }
+    const values = toLongForm(sweep.filter((r) => r.dialect === dialect));
+    const svg = await toSvg(dialectSpec({ dialect, values }));
+    const file = path.join(outDir, `${dialect}.svg`);
+    fs.writeFileSync(file, svg);
+    console.log(`wrote ${file}`);
   }
 
   // Faceted overview: exec ms vs rows, one panel per dialect.

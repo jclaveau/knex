@@ -96,7 +96,12 @@ function chunksNeeded(knex, columns, rows, mode) {
     mode === 'case'
       ? columns.length * 2 + 1 // each column matches the row's key, plus the WHERE key
       : columns.length + 1; // union: one value per cell (key + columns)
-  const maxRows = Math.max(1, Math.floor(limit / perRow));
+  // Mirror the executor: the tighter of the bind-parameter cap and any
+  // structural per-statement row cap (e.g. SQLite's compound-SELECT limit).
+  const maxRows = Math.min(
+    Math.max(1, Math.floor(limit / perRow)),
+    knex.client.batchUpdateRowLimit(mode)
+  );
   return Math.ceil(rows.length / maxRows);
 }
 

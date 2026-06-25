@@ -1047,6 +1047,46 @@ describe('Updates', function () {
             .first();
           expect(Number(updated.c)).to.equal(10);
         });
+
+        it("splits a union batch under SQLite's compound-SELECT term cap", async function () {
+          // union emits one UNION ALL term per row; SQLite caps a compound SELECT
+          // at 500 terms, well under the bind-parameter cap. Without the
+          // per-dialect row cap a 600-row batch fails to compile ("too many terms
+          // in compound SELECT"); with it, it splits into ceil(600 / 500) = 2.
+          if (!isSQLite(knex)) {
+            return this.skip();
+          }
+          const rows = Array.from({ length: 600 }, (_, i) => ({
+            id: i + 1,
+            name: `n${i + 1}`,
+            age: i,
+          }));
+          // batchInsert (chunked) to seed — a single 597-row insert would hit the
+          // same compound-SELECT cap.
+          await knex.batchInsert('members', rows.slice(3), 100); // 1-3 seeded
+          const statements = [];
+          const onQuery = (query) => {
+            if (/^\s*update\s/i.test(query.sql)) {
+              statements.push(query.sql);
+            }
+          };
+          knex.on('query', onQuery);
+          try {
+            await knex.batchUpdate(
+              'members',
+              rows.map((r) => ({ ...r, name: 'big' }))
+            );
+          } finally {
+            knex.off('query', onQuery);
+          }
+
+          expect(statements).to.have.lengthOf(2);
+          const updated = await knex('members')
+            .where('name', 'big')
+            .count({ c: 'id' })
+            .first();
+          expect(Number(updated.c)).to.equal(600);
+        });
       });
     });
   });

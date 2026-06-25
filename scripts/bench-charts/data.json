@@ -1,0 +1,982 @@
+[
+ {
+  "dialect": "postgres",
+  "results": [
+   {
+    "rowCount": 100,
+    "colCount": 3,
+    "mode": "union",
+    "sqlBytes": 2961,
+    "params": 400,
+    "chunks": 1,
+    "ms": 10.621158
+   },
+   {
+    "rowCount": 100,
+    "colCount": 3,
+    "mode": "case",
+    "sqlBytes": 9121,
+    "params": 700,
+    "chunks": 1,
+    "ms": 8.890908
+   },
+   {
+    "rowCount": 100,
+    "colCount": 3,
+    "mode": "json",
+    "sqlBytes": 179,
+    "params": 1,
+    "chunks": 1,
+    "ms": 3.713199
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 3,
+    "mode": "union",
+    "sqlBytes": 28161,
+    "params": 4000,
+    "chunks": 1,
+    "ms": 40.691514
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 3,
+    "mode": "case",
+    "sqlBytes": 90121,
+    "params": 7000,
+    "chunks": 1,
+    "ms": 48.667055
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 3,
+    "mode": "json",
+    "sqlBytes": 179,
+    "params": 1,
+    "chunks": 1,
+    "ms": 10.58862
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 20,
+    "mode": "union",
+    "sqlBytes": 79718,
+    "params": 21000,
+    "chunks": 1,
+    "ms": 106.793535
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 20,
+    "mode": "case",
+    "sqlBytes": 583600,
+    "params": 41000,
+    "chunks": 1,
+    "ms": 273.024687
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 20,
+    "mode": "json",
+    "sqlBytes": 685,
+    "params": 1,
+    "chunks": 1,
+    "ms": 26.786211
+   },
+   {
+    "rowCount": 10000,
+    "colCount": 3,
+    "mode": "union",
+    "sqlBytes": 280161,
+    "params": 40000,
+    "chunks": 1,
+    "ms": 400.523398
+   },
+   {
+    "rowCount": 10000,
+    "colCount": 3,
+    "mode": "case",
+    "sqlBytes": 900121,
+    "params": 70000,
+    "chunks": 2,
+    "ms": 445.46421
+   },
+   {
+    "rowCount": 10000,
+    "colCount": 3,
+    "mode": "json",
+    "sqlBytes": 179,
+    "params": 1,
+    "chunks": 1,
+    "ms": 92.307982
+   },
+   {
+    "rowCount": 50000,
+    "colCount": 3,
+    "mode": "union",
+    "sqlBytes": 1400161,
+    "params": 200000,
+    "chunks": 4,
+    "ms": 2678.918072
+   },
+   {
+    "rowCount": 50000,
+    "colCount": 3,
+    "mode": "case",
+    "sqlBytes": 4500121,
+    "params": 350000,
+    "chunks": 6,
+    "ms": 2353.149599
+   },
+   {
+    "rowCount": 50000,
+    "colCount": 3,
+    "mode": "json",
+    "sqlBytes": 179,
+    "params": 1,
+    "chunks": 1,
+    "ms": 778.969415
+   }
+  ]
+ },
+ {
+  "dialect": "mysql",
+  "results": [
+   {
+    "rowCount": 100,
+    "colCount": 3,
+    "mode": "union",
+    "sqlBytes": 2971,
+    "params": 400,
+    "chunks": 1,
+    "ms": 7.417712
+   },
+   {
+    "rowCount": 100,
+    "colCount": 3,
+    "mode": "case",
+    "sqlBytes": 9121,
+    "params": 700,
+    "chunks": 1,
+    "ms": 6.002328
+   },
+   {
+    "rowCount": 100,
+    "colCount": 3,
+    "mode": "json",
+    "sqlBytes": 284,
+    "params": 1,
+    "chunks": 1,
+    "ms": 4.704663
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 3,
+    "mode": "union",
+    "sqlBytes": 28171,
+    "params": 4000,
+    "chunks": 1,
+    "ms": 29.548978
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 3,
+    "mode": "case",
+    "sqlBytes": 90121,
+    "params": 7000,
+    "chunks": 1,
+    "ms": 61.554116
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 3,
+    "mode": "json",
+    "sqlBytes": 284,
+    "params": 1,
+    "chunks": 1,
+    "ms": 20.406123
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 20,
+    "mode": "union",
+    "sqlBytes": 79796,
+    "params": 21000,
+    "chunks": 1,
+    "ms": 62.146197
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 20,
+    "mode": "case",
+    "sqlBytes": 583600,
+    "params": 41000,
+    "chunks": 1,
+    "ms": 344.267613
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 20,
+    "mode": "json",
+    "sqlBytes": 1259,
+    "params": 1,
+    "chunks": 1,
+    "ms": 77.072571
+   },
+   {
+    "rowCount": 10000,
+    "colCount": 3,
+    "mode": "union",
+    "sqlBytes": 280171,
+    "params": 40000,
+    "chunks": 1,
+    "ms": 228.689314
+   },
+   {
+    "rowCount": 10000,
+    "colCount": 3,
+    "mode": "case",
+    "sqlBytes": 900121,
+    "params": 70000,
+    "chunks": 2,
+    "ms": 591.014028
+   },
+   {
+    "rowCount": 10000,
+    "colCount": 3,
+    "mode": "json",
+    "sqlBytes": 284,
+    "params": 1,
+    "chunks": 1,
+    "ms": 185.901334
+   },
+   {
+    "rowCount": 50000,
+    "colCount": 3,
+    "mode": "union",
+    "sqlBytes": 1400171,
+    "params": 200000,
+    "chunks": 4,
+    "ms": 1164.182252
+   },
+   {
+    "rowCount": 50000,
+    "colCount": 3,
+    "mode": "case",
+    "sqlBytes": 4500121,
+    "params": 350000,
+    "chunks": 6,
+    "ms": 2913.94591
+   },
+   {
+    "rowCount": 50000,
+    "colCount": 3,
+    "mode": "json",
+    "sqlBytes": 284,
+    "params": 1,
+    "chunks": 1,
+    "ms": 946.753385
+   }
+  ]
+ },
+ {
+  "dialect": "mariadb",
+  "results": [
+   {
+    "rowCount": 100,
+    "colCount": 3,
+    "mode": "union",
+    "sqlBytes": 2971,
+    "params": 400,
+    "chunks": 1,
+    "ms": 5.251574
+   },
+   {
+    "rowCount": 100,
+    "colCount": 3,
+    "mode": "case",
+    "sqlBytes": 9121,
+    "params": 700,
+    "chunks": 1,
+    "ms": 5.598345
+   },
+   {
+    "rowCount": 100,
+    "colCount": 3,
+    "mode": "json",
+    "sqlBytes": 284,
+    "params": 1,
+    "chunks": 1,
+    "ms": 4.257275
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 3,
+    "mode": "union",
+    "sqlBytes": 28171,
+    "params": 4000,
+    "chunks": 1,
+    "ms": 19.263662
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 3,
+    "mode": "case",
+    "sqlBytes": 90121,
+    "params": 7000,
+    "chunks": 1,
+    "ms": 53.41897
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 3,
+    "mode": "json",
+    "sqlBytes": 284,
+    "params": 1,
+    "chunks": 1,
+    "ms": 17.299354
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 20,
+    "mode": "union",
+    "sqlBytes": 79796,
+    "params": 21000,
+    "chunks": 1,
+    "ms": 49.680793
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 20,
+    "mode": "case",
+    "sqlBytes": 583600,
+    "params": 41000,
+    "chunks": 1,
+    "ms": 444.386111
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 20,
+    "mode": "json",
+    "sqlBytes": 1259,
+    "params": 1,
+    "chunks": 1,
+    "ms": 55.264488
+   },
+   {
+    "rowCount": 10000,
+    "colCount": 3,
+    "mode": "union",
+    "sqlBytes": 280171,
+    "params": 40000,
+    "chunks": 1,
+    "ms": 145.46609
+   },
+   {
+    "rowCount": 10000,
+    "colCount": 3,
+    "mode": "case",
+    "sqlBytes": 900121,
+    "params": 70000,
+    "chunks": 2,
+    "ms": 591.197033
+   },
+   {
+    "rowCount": 10000,
+    "colCount": 3,
+    "mode": "json",
+    "sqlBytes": 284,
+    "params": 1,
+    "chunks": 1,
+    "ms": 123.392017
+   },
+   {
+    "rowCount": 50000,
+    "colCount": 3,
+    "mode": "union",
+    "sqlBytes": 1400171,
+    "params": 200000,
+    "chunks": 4,
+    "ms": 684.674588
+   },
+   {
+    "rowCount": 50000,
+    "colCount": 3,
+    "mode": "case",
+    "sqlBytes": 4500121,
+    "params": 350000,
+    "chunks": 6,
+    "ms": 2477.596215
+   },
+   {
+    "rowCount": 50000,
+    "colCount": 3,
+    "mode": "json",
+    "sqlBytes": 284,
+    "params": 1,
+    "chunks": 1,
+    "ms": 634.908169
+   }
+  ]
+ },
+ {
+  "dialect": "mssql",
+  "results": [
+   {
+    "rowCount": 100,
+    "colCount": 3,
+    "mode": "union",
+    "sqlBytes": 2952,
+    "params": 400,
+    "chunks": 1,
+    "ms": 66.781409
+   },
+   {
+    "rowCount": 100,
+    "colCount": 3,
+    "mode": "case",
+    "sqlBytes": 9139,
+    "params": 700,
+    "chunks": 1,
+    "ms": 86.867726
+   },
+   {
+    "rowCount": 100,
+    "colCount": 3,
+    "mode": "json",
+    "sqlBytes": 254,
+    "params": 1,
+    "chunks": 1,
+    "ms": 69.798987
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 3,
+    "mode": "union",
+    "sqlBytes": 28152,
+    "params": 4000,
+    "chunks": 2,
+    "ms": 389.72769
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 3,
+    "mode": "case",
+    "sqlBytes": 90139,
+    "params": 7000,
+    "chunks": 4,
+    "ms": 615.493568
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 3,
+    "mode": "json",
+    "sqlBytes": 254,
+    "params": 1,
+    "chunks": 1,
+    "ms": 55.280995
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 20,
+    "mode": "union",
+    "sqlBytes": 79607,
+    "params": 21000,
+    "chunks": 11,
+    "ms": 1136.654655
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 20,
+    "mode": "case",
+    "sqlBytes": 583618,
+    "params": 41000,
+    "chunks": 20,
+    "ms": 1973.232761
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 20,
+    "mode": "json",
+    "sqlBytes": 1076,
+    "params": 1,
+    "chunks": 1,
+    "ms": 110.967817
+   },
+   {
+    "rowCount": 10000,
+    "colCount": 3,
+    "mode": "union",
+    "sqlBytes": 280152,
+    "params": 40000,
+    "chunks": 20,
+    "ms": 2070.36185
+   },
+   {
+    "rowCount": 10000,
+    "colCount": 3,
+    "mode": "case",
+    "sqlBytes": 900139,
+    "params": 70000,
+    "chunks": 34,
+    "ms": 3378.769171
+   },
+   {
+    "rowCount": 10000,
+    "colCount": 3,
+    "mode": "json",
+    "sqlBytes": 254,
+    "params": 1,
+    "chunks": 1,
+    "ms": 342.247203
+   },
+   {
+    "rowCount": 50000,
+    "colCount": 3,
+    "mode": "union",
+    "sqlBytes": 1400152,
+    "params": 200000,
+    "chunks": 96,
+    "ms": 9069.769881
+   },
+   {
+    "rowCount": 50000,
+    "colCount": 3,
+    "mode": "case",
+    "sqlBytes": 4500139,
+    "params": 350000,
+    "chunks": 168,
+    "ms": 15314.340095
+   },
+   {
+    "rowCount": 50000,
+    "colCount": 3,
+    "mode": "json",
+    "sqlBytes": 254,
+    "params": 1,
+    "chunks": 1,
+    "ms": 2292.363914
+   }
+  ]
+ },
+ {
+  "dialect": "oracledb",
+  "results": [
+   {
+    "rowCount": 100,
+    "colCount": 3,
+    "mode": "union",
+    "sqlBytes": 3970,
+    "params": 400,
+    "chunks": 1,
+    "ms": 47.64345
+   },
+   {
+    "rowCount": 100,
+    "colCount": 3,
+    "mode": "case",
+    "sqlBytes": 9121,
+    "params": 700,
+    "chunks": 1,
+    "ms": 23.279362
+   },
+   {
+    "rowCount": 100,
+    "colCount": 3,
+    "mode": "json",
+    "sqlBytes": 349,
+    "params": 2,
+    "chunks": 1,
+    "ms": 12.274646
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 3,
+    "mode": "union",
+    "sqlBytes": 38170,
+    "params": 4000,
+    "chunks": 1,
+    "ms": 1524.904566
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 3,
+    "mode": "case",
+    "sqlBytes": 90121,
+    "params": 7000,
+    "chunks": 1,
+    "ms": 432.022723
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 3,
+    "mode": "json",
+    "sqlBytes": 517,
+    "params": 14,
+    "chunks": 1,
+    "ms": 61.242287
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 20,
+    "mode": "union",
+    "sqlBytes": 89676,
+    "params": 21000,
+    "chunks": 1,
+    "ms": 6434.423506
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 20,
+    "mode": "case",
+    "sqlBytes": 583600,
+    "params": 41000,
+    "chunks": 1,
+    "ms": 10476.420716
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 20,
+    "mode": "json",
+    "sqlBytes": 2388,
+    "params": 78,
+    "chunks": 1,
+    "ms": 265.72429
+   },
+   {
+    "rowCount": 10000,
+    "colCount": 3,
+    "mode": "union",
+    "sqlBytes": 380170,
+    "params": 40000,
+    "chunks": 1,
+    "ms": 1985.781304
+   },
+   {
+    "rowCount": 10000,
+    "colCount": 3,
+    "mode": "case",
+    "sqlBytes": 900121,
+    "params": 70000,
+    "chunks": 2,
+    "ms": 2071.71268
+   },
+   {
+    "rowCount": 10000,
+    "colCount": 3,
+    "mode": "json",
+    "sqlBytes": 2309,
+    "params": 142,
+    "chunks": 1,
+    "ms": 437.66079
+   },
+   {
+    "rowCount": 50000,
+    "colCount": 3,
+    "mode": "union",
+    "sqlBytes": 1900170,
+    "params": 200000,
+    "chunks": 4,
+    "ms": 3839.041733
+   },
+   {
+    "rowCount": 50000,
+    "colCount": 3,
+    "mode": "case",
+    "sqlBytes": 4500121,
+    "params": 350000,
+    "chunks": 6,
+    "ms": 3853.328116
+   },
+   {
+    "rowCount": 50000,
+    "colCount": 3,
+    "mode": "json",
+    "sqlBytes": 10849,
+    "params": 752,
+    "chunks": 1,
+    "ms": 1908.181918
+   }
+  ]
+ },
+ {
+  "dialect": "cockroachdb",
+  "results": [
+   {
+    "rowCount": 100,
+    "colCount": 3,
+    "mode": "union",
+    "sqlBytes": 2961,
+    "params": 400,
+    "chunks": 1,
+    "ms": 27.463322
+   },
+   {
+    "rowCount": 100,
+    "colCount": 3,
+    "mode": "case",
+    "sqlBytes": 9121,
+    "params": 700,
+    "chunks": 1,
+    "ms": 21.45187
+   },
+   {
+    "rowCount": 100,
+    "colCount": 3,
+    "mode": "json",
+    "sqlBytes": 179,
+    "params": 1,
+    "chunks": 1,
+    "ms": 11.847583
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 3,
+    "mode": "union",
+    "sqlBytes": 28161,
+    "params": 4000,
+    "chunks": 1,
+    "ms": 720.831995
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 3,
+    "mode": "case",
+    "sqlBytes": 90121,
+    "params": 7000,
+    "chunks": 1,
+    "ms": 209.419609
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 3,
+    "mode": "json",
+    "sqlBytes": 179,
+    "params": 1,
+    "chunks": 1,
+    "ms": 79.235589
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 20,
+    "mode": "union",
+    "sqlBytes": 79718,
+    "params": 21000,
+    "chunks": 1,
+    "ms": 1111.198182
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 20,
+    "mode": "case",
+    "sqlBytes": 583600,
+    "params": 41000,
+    "chunks": 1,
+    "ms": 1209.283338
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 20,
+    "mode": "json",
+    "sqlBytes": 685,
+    "params": 1,
+    "chunks": 1,
+    "ms": 295.132607
+   },
+   {
+    "rowCount": 10000,
+    "colCount": 3,
+    "mode": "union",
+    "sqlBytes": 280161,
+    "params": 40000,
+    "chunks": 1,
+    "ms": 6892.803454
+   },
+   {
+    "rowCount": 10000,
+    "colCount": 3,
+    "mode": "case",
+    "sqlBytes": 900121,
+    "params": 70000,
+    "chunks": 2,
+    "ms": 1927.829721
+   },
+   {
+    "rowCount": 10000,
+    "colCount": 3,
+    "mode": "json",
+    "sqlBytes": 179,
+    "params": 1,
+    "chunks": 1,
+    "ms": 6729.466288
+   },
+   {
+    "rowCount": 50000,
+    "colCount": 3,
+    "mode": "union",
+    "sqlBytes": 1400161,
+    "params": 200000,
+    "chunks": 4,
+    "ms": 170311.375727
+   },
+   {
+    "rowCount": 50000,
+    "colCount": 3,
+    "mode": "case",
+    "sqlBytes": 4500121,
+    "params": 350000,
+    "chunks": 6,
+    "ms": 9655.53863
+   },
+   {
+    "rowCount": 50000,
+    "colCount": 3,
+    "mode": "json",
+    "sqlBytes": 179,
+    "params": 1,
+    "chunks": 1,
+    "ms": 140022.843077
+   }
+  ]
+ },
+ {
+  "dialect": "sqlite3",
+  "results": [
+   {
+    "rowCount": 100,
+    "colCount": 3,
+    "mode": "union",
+    "sqlBytes": 2934,
+    "params": 400,
+    "chunks": 1,
+    "ms": 7.601224
+   },
+   {
+    "rowCount": 100,
+    "colCount": 3,
+    "mode": "case",
+    "sqlBytes": 9121,
+    "params": 700,
+    "chunks": 1,
+    "ms": 3.805329
+   },
+   {
+    "rowCount": 100,
+    "colCount": 3,
+    "mode": "json",
+    "sqlBytes": 264,
+    "params": 5,
+    "chunks": 1,
+    "ms": 2.02158
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 3,
+    "mode": "union",
+    "sqlBytes": 28134,
+    "params": 4000,
+    "chunks": 2,
+    "ms": 8.187801
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 3,
+    "mode": "case",
+    "sqlBytes": 90121,
+    "params": 7000,
+    "chunks": 1,
+    "ms": 79.730717
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 3,
+    "mode": "json",
+    "sqlBytes": 264,
+    "params": 5,
+    "chunks": 1,
+    "ms": 4.26189
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 20,
+    "mode": "union",
+    "sqlBytes": 79589,
+    "params": 21000,
+    "chunks": 2,
+    "ms": 22.346851
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 20,
+    "mode": "case",
+    "sqlBytes": 583600,
+    "params": 41000,
+    "chunks": 2,
+    "ms": 2376.392203
+   },
+   {
+    "rowCount": 1000,
+    "colCount": 20,
+    "mode": "json",
+    "sqlBytes": 1127,
+    "params": 22,
+    "chunks": 1,
+    "ms": 21.688877
+   },
+   {
+    "rowCount": 10000,
+    "colCount": 3,
+    "mode": "union",
+    "sqlBytes": 280134,
+    "params": 40000,
+    "chunks": 20,
+    "ms": 52.565618
+   },
+   {
+    "rowCount": 10000,
+    "colCount": 3,
+    "mode": "case",
+    "sqlBytes": 900121,
+    "params": 70000,
+    "chunks": 3,
+    "ms": 698.259555
+   },
+   {
+    "rowCount": 10000,
+    "colCount": 3,
+    "mode": "json",
+    "sqlBytes": 264,
+    "params": 5,
+    "chunks": 1,
+    "ms": 20.63505
+   },
+   {
+    "rowCount": 50000,
+    "colCount": 3,
+    "mode": "union",
+    "sqlBytes": 1400134,
+    "params": 200000,
+    "chunks": 100,
+    "ms": 224.427008
+   },
+   {
+    "rowCount": 50000,
+    "colCount": 3,
+    "mode": "case",
+    "sqlBytes": 4500121,
+    "params": 350000,
+    "chunks": 11,
+    "ms": 3666.381216
+   },
+   {
+    "rowCount": 50000,
+    "colCount": 3,
+    "mode": "json",
+    "sqlBytes": 264,
+    "params": 5,
+    "chunks": 1,
+    "ms": 106.882299
+   }
+  ]
+ }
+]

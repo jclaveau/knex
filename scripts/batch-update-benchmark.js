@@ -219,40 +219,24 @@ async function run() {
     }
   }
 
-  printScalingCharts(dialect, results);
+  printChartImage(dialect);
   printResultsJson(dialect, results);
   await benchColumnTypes(knex);
 
   await knex.destroy();
 }
 
-// Scaling curves for the run summary: exec ms vs row-count (at the cols=3 sweep),
-// one Mermaid line chart per mode. xychart-beta has no legend, so each mode is
-// its own titled chart rather than overlaid. The richer multi-series curves
-// (all modes in one graph, log axes, color/stroke per series) are the committed
-// SVGs built by scripts/batch-update-charts.js from the JSON block below.
-function printScalingCharts(dialect, results) {
-  const sweep = results
-    .filter((r) => r.colCount === 3 && r.ms != null)
-    .sort((a, b) => a.rowCount - b.rowCount);
-  const rowCounts = [...new Set(sweep.map((r) => r.rowCount))];
-  console.log('\n## scaling curves (exec ms vs rows, cols=3)\n');
-  for (const mode of MODES) {
-    const points = rowCounts.map((rowCount) => {
-      const cell = sweep.find(
-        (r) => r.rowCount === rowCount && r.mode === mode
-      );
-      return cell ? Math.round(cell.ms) : 0;
-    });
-    console.log('```mermaid');
-    console.log('xychart-beta');
-    console.log(`  title "${dialect} — ${mode}: exec ms vs rows (cols=3)"`);
-    console.log(`  x-axis [${rowCounts.join(', ')}]`);
-    console.log(`  y-axis "exec ms"`);
-    console.log(`  line [${points.join(', ')}]`);
-    console.log('```');
-    console.log('');
-  }
+// One graph per dialect in the run summary: embed the committed combined chart
+// (all six curves, log axes, legend) for this dialect. Mermaid can't render that
+// — no legend or stroke styles — so the summary points at the SVG/PNG that
+// scripts/batch-update-charts.js builds from the JSON block below. It reflects
+// the last committed chart data (this run's fresh numbers are in the table).
+function printChartImage(dialect) {
+  const base =
+    'https://raw.githubusercontent.com/jclaveau/knex/feat/batch-update/scripts/bench-charts';
+  console.log('\n## chart (committed; regenerate from the JSON below)\n');
+  console.log(`![${dialect} batchUpdate chart](${base}/${dialect}.png)`);
+  console.log('');
 }
 
 // Machine-readable results for scripts/batch-update-charts.js, in an HTML comment

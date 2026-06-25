@@ -219,49 +219,48 @@ async function run() {
     }
   }
 
-  printModeCharts(dialect, results);
+  printScalingCharts(dialect, results);
+  printResultsJson(dialect, results);
   await benchColumnTypes(knex);
 
   await knex.destroy();
 }
 
-// Per-size bar charts comparing the modes, as Mermaid xychart-beta blocks that
-// GitHub renders inline. One chart per (metric, size): x-axis is the mode, so
-// the bars are self-labelled (xychart-beta has no series legend). A mode that
-// errored shows as 0 (its ERR is in the table above). Metrics use their own
-// chart because their ranges differ by orders of magnitude.
-function printModeCharts(dialect, results) {
-  const sizes = [];
-  for (const r of results) {
-    const size = `${r.rowCount}x${r.colCount}`;
-    if (!sizes.includes(size)) sizes.push(size);
+// Scaling curves for the run summary: exec ms vs row-count (at the cols=3 sweep),
+// one Mermaid line chart per mode. xychart-beta has no legend, so each mode is
+// its own titled chart rather than overlaid. The richer multi-series curves
+// (all modes in one graph, log axes, color/stroke per series) are the committed
+// SVGs built by scripts/batch-update-charts.js from the JSON block below.
+function printScalingCharts(dialect, results) {
+  const sweep = results
+    .filter((r) => r.colCount === 3 && r.ms != null)
+    .sort((a, b) => a.rowCount - b.rowCount);
+  const rowCounts = [...new Set(sweep.map((r) => r.rowCount))];
+  console.log('\n## scaling curves (exec ms vs rows, cols=3)\n');
+  for (const mode of MODES) {
+    const points = rowCounts.map((rowCount) => {
+      const cell = sweep.find(
+        (r) => r.rowCount === rowCount && r.mode === mode
+      );
+      return cell ? Math.round(cell.ms) : 0;
+    });
+    console.log('```mermaid');
+    console.log('xychart-beta');
+    console.log(`  title "${dialect} — ${mode}: exec ms vs rows (cols=3)"`);
+    console.log(`  x-axis [${rowCounts.join(', ')}]`);
+    console.log(`  y-axis "exec ms"`);
+    console.log(`  line [${points.join(', ')}]`);
+    console.log('```');
+    console.log('');
   }
-  const metrics = [
-    { key: 'ms', label: 'exec ms', round: (v) => Math.round(v) },
-    { key: 'params', label: 'bound params', round: (v) => v },
-    { key: 'sqlBytes', label: 'SQL bytes', round: (v) => v },
-  ];
-  console.log('\n## mode comparison (charts)\n');
-  for (const size of sizes) {
-    for (const metric of metrics) {
-      const values = MODES.map((mode) => {
-        const cell = results.find(
-          (r) => `${r.rowCount}x${r.colCount}` === size && r.mode === mode
-        );
-        return cell && cell[metric.key] != null
-          ? metric.round(cell[metric.key])
-          : 0;
-      });
-      console.log('```mermaid');
-      console.log('xychart-beta');
-      console.log(`  title "${dialect} ${size} — ${metric.label} by mode"`);
-      console.log(`  x-axis [${MODES.join(', ')}]`);
-      console.log(`  y-axis "${metric.label}"`);
-      console.log(`  bar [${values.join(', ')}]`);
-      console.log('```');
-      console.log('');
-    }
-  }
+}
+
+// Machine-readable results for scripts/batch-update-charts.js, in an HTML comment
+// so it stays out of the rendered summary but is greppable in the job log.
+function printResultsJson(dialect, results) {
+  console.log('\n<!-- batch-update-bench-json');
+  console.log(JSON.stringify({ dialect, results }));
+  console.log('-->');
 }
 
 run().catch((error) => {

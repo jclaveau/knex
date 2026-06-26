@@ -45,9 +45,9 @@ function loadRecords(dataPath) {
 }
 
 // One graph per dialect gathering every curve: exec ms, bound params and chunk
-// count for all three modes (9 curves). color = mode, stroke-dash + point shape =
-// metric, on a shared log y-axis (all three are "lower is better"). `detail`
-// keeps each (mode, metric) a separate line.
+// count for all three modes (9 curves). color = mode, point shape = metric, on a
+// shared log y-axis (all three are "lower is better"). `detail` keeps each
+// (mode, metric) a separate line.
 function dialectSpec({ dialect, values }) {
   return {
     $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
@@ -75,12 +75,6 @@ function dialectSpec({ dialect, values }) {
         type: 'nominal',
         sort: MODE_ORDER,
         title: 'mode',
-      },
-      strokeDash: {
-        field: 'metric',
-        type: 'nominal',
-        sort: METRIC_ORDER,
-        title: 'metric',
       },
       shape: {
         field: 'metric',

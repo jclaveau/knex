@@ -16,11 +16,22 @@
 // against the same servers CI stands up. sqlite3 is the default — the one
 // embedded dialect that needs no server.
 
+const crypto = require('crypto');
 const {
   getKnexForDb,
 } = require('../test/integration2/util/knex-instance-provider');
 
 const MODES = ['union', 'case', 'json'];
+
+// Blob scenario: rows carry metadata columns plus one binary column, so the
+// timings show binary handling per mode — union/case bind the Buffer natively,
+// json auto-splits (json for the metadata + a companion union/per-row for the
+// blob), and Oracle/pgnative take the per-row path.
+const BLOB_MATRIX = [
+  { rows: 100, blobBytes: 1024 },
+  { rows: 100, blobBytes: 16384 },
+];
+const BLOB_META_COLUMNS = ['m0', 'm1', 'm2'];
 
 // The JSON_TABLE / OPENJSON dialects need an explicit type per column for json
 // mode (they can't infer it); Postgres infers and SQLite is typeless, so they
@@ -164,6 +175,72 @@ async function benchColumnTypes(knex) {
   }
 }
 
+// Times each mode updating rows that carry a binary column. pgnative can't bind
+// a Buffer to bytea (driver limit) so it's skipped; Redshift has no bytea and
+// errors per cell. The json column types cover only the metadata (the blob rides
+// the companion union/per-row statement, which needs no map).
+async function benchBlobs(knex) {
+  if (knex.client.driverName === 'pgnative') {
+    console.log(
+      "\n## blob updates — skipped on pgnative (driver can't bind bytea)\n"
+    );
+    return;
+  }
+  console.log(
+    `\n## blob updates (${BLOB_META_COLUMNS.length} metadata cols + 1 blob)\n`
+  );
+  console.log('| rows | blob bytes | mode | exec ms |');
+  console.log('|---:|---:|---|---:|');
+  const metaTypes = jsonColumnTypesFor(knex, BLOB_META_COLUMNS);
+  const limit = knex.client.maxBindParameters || Infinity;
+  const insertChunk = Math.max(
+    1,
+    Math.min(50, Math.floor(limit / (BLOB_META_COLUMNS.length + 2)))
+  );
+  for (const { rows: rowCount, blobBytes } of BLOB_MATRIX) {
+    await knex.schema.dropTableIfExists('bench_blobs');
+    await knex.schema.createTable('bench_blobs', (table) => {
+      table.integer('id').primary();
+      for (const column of BLOB_META_COLUMNS) {
+        table.string(column);
+      }
+      table.binary('data');
+    });
+    const seed = [];
+    for (let id = 1; id <= rowCount; id++) {
+      const row = { id, data: Buffer.alloc(blobBytes, id % 256) };
+      for (const column of BLOB_META_COLUMNS) {
+        row[column] = `${column}-${id}`;
+      }
+      seed.push(row);
+    }
+    await knex.batchInsert('bench_blobs', seed, insertChunk);
+    for (const mode of MODES) {
+      let ms;
+      try {
+        const updates = seed.map((row) => {
+          const next = { id: row.id, data: crypto.randomBytes(blobBytes) };
+          for (const column of BLOB_META_COLUMNS) {
+            next[column] = `${column}-updated-${row.id}`;
+          }
+          return next;
+        });
+        const options = { mode };
+        if (mode === 'json' && metaTypes) {
+          options.columnTypes = metaTypes;
+        }
+        const start = process.hrtime.bigint();
+        await knex.batchUpdate('bench_blobs', updates, 'id', options);
+        ms = (Number(process.hrtime.bigint() - start) / 1e6).toFixed(1);
+      } catch (error) {
+        ms = `ERR: ${error.message.split(' - ').pop().slice(0, 45)}`;
+      }
+      console.log(`| ${rowCount} | ${blobBytes} | ${mode} | ${ms} |`);
+    }
+  }
+  await knex.schema.dropTableIfExists('bench_blobs');
+}
+
 async function run() {
   const dialect = (process.env.DB || process.argv[2] || 'sqlite3').match(
     /[\w-]+/g
@@ -223,6 +300,7 @@ async function run() {
   printChartImage(dialect);
   printResultsJson(dialect, results);
   await benchColumnTypes(knex);
+  await benchBlobs(knex);
 
   await knex.destroy();
 }

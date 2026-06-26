@@ -1148,6 +1148,15 @@ describe('Updates', function () {
       describe('batchUpdate binary (blob)', function () {
         this.timeout(60000);
 
+        before(function () {
+          // pg-native (libpq, text protocol) can't bind an arbitrary Buffer to
+          // bytea — postgres reads the text as a bytea escape literal and rejects
+          // non-escape bytes. A driver limitation, not batchUpdate-specific.
+          if (knex.client.driverName === 'pgnative') {
+            this.skip();
+          }
+        });
+
         beforeEach(async () => {
           await knex.schema.dropTableIfExists('blobs');
           await knex.schema.createTable('blobs', (table) => {

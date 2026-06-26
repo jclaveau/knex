@@ -1152,11 +1152,12 @@ describe('Updates', function () {
           await knex.schema.dropTableIfExists('blobs');
           await knex.schema.createTable('blobs', (table) => {
             table.integer('id').primary();
+            table.string('label');
             table.binary('data');
           });
           await knex('blobs').insert([
-            { id: 1, data: Buffer.from('seed-1') },
-            { id: 2, data: Buffer.from('seed-2') },
+            { id: 1, label: 'seed', data: Buffer.from('seed-1') },
+            { id: 2, label: 'seed', data: Buffer.from('seed-2') },
           ]);
         });
 
@@ -1164,19 +1165,29 @@ describe('Updates', function () {
           await knex.schema.dropTableIfExists('blobs');
         });
 
-        // Redshift has no bytea; binary batchUpdate throws there (asserted in the
-        // unit suite). It isn't in the integration matrix, so nothing to skip.
+        const jsonLabelType = () =>
+          isMysql(knex)
+            ? { id: 'int', label: 'char(255)' }
+            : isMssql(knex)
+            ? { id: 'int', label: 'nvarchar(255)' }
+            : isOracle(knex)
+            ? { id: 'number', label: 'varchar2(255)' }
+            : undefined;
+
+        // Redshift has no bytea; binary batchUpdate throws there. It isn't in the
+        // integration matrix, so nothing to skip.
         for (const mode of ['union', 'case']) {
           it(`round-trips a large blob in '${mode}' mode`, async function () {
             // 40 KB > Oracle's 4000-byte inline bind, so this exercises the
             // per-row LOB fallback there and the native binary bind elsewhere.
             const updates = [
-              { id: 1, data: crypto.randomBytes(40000) },
-              { id: 2, data: crypto.randomBytes(40000) },
+              { id: 1, label: 'a', data: crypto.randomBytes(40000) },
+              { id: 2, label: 'b', data: crypto.randomBytes(40000) },
             ];
             await knex.batchUpdate('blobs', updates, 'id', { mode });
 
             const rows = await knex('blobs').orderBy('id');
+            expect(rows.map((r) => r.label)).to.eql(['a', 'b']);
             expect(Buffer.from(rows[0].data).equals(updates[0].data)).to.equal(
               true
             );
@@ -1186,15 +1197,28 @@ describe('Updates', function () {
           });
         }
 
-        it("rejects binary in 'json' mode", function () {
-          expect(() =>
-            knex.batchUpdate(
-              'blobs',
-              [{ id: 1, data: Buffer.from('x') }],
-              'id',
-              { mode: 'json' }
-            )
-          ).to.throw(/does not support binary/);
+        it('json mode auto-splits: json for the label, union/per-row for the blob', async function () {
+          // json can't carry a Buffer, so the executor updates `label` with a
+          // json statement and `data` with a companion binary statement, both
+          // keyed, in one transaction.
+          const columnTypes = jsonLabelType();
+          const updates = [
+            { id: 1, label: 'json-1', data: crypto.randomBytes(40000) },
+            { id: 2, label: 'json-2', data: crypto.randomBytes(40000) },
+          ];
+          await knex.batchUpdate('blobs', updates, 'id', {
+            mode: 'json',
+            ...(columnTypes ? { columnTypes } : {}),
+          });
+
+          const rows = await knex('blobs').orderBy('id');
+          expect(rows.map((r) => r.label)).to.eql(['json-1', 'json-2']);
+          expect(Buffer.from(rows[0].data).equals(updates[0].data)).to.equal(
+            true
+          );
+          expect(Buffer.from(rows[1].data).equals(updates[1].data)).to.equal(
+            true
+          );
         });
       });
     });

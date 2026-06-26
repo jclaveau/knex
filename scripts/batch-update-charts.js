@@ -19,6 +19,9 @@ const vegaLite = require('vega-lite');
 const vega = require('vega');
 
 const MODE_ORDER = ['union', 'case', 'json'];
+// Point shapes are pinned per metric: exec ms = square, bound params = circle,
+// chunks = triangle (see the shape scale in dialectSpec).
+const METRIC_ORDER = ['exec ms', 'bound params', 'chunks'];
 
 function loadRecords(dataPath) {
   const raw = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
@@ -33,6 +36,7 @@ function loadRecords(dataPath) {
         mode: r.mode,
         ms: r.ms,
         params: r.params,
+        chunks: r.chunks,
         sqlBytes: r.sqlBytes,
       });
     }
@@ -72,8 +76,22 @@ function dialectSpec({ dialect, values }) {
         sort: MODE_ORDER,
         title: 'mode',
       },
-      strokeDash: { field: 'metric', type: 'nominal', title: 'metric' },
-      shape: { field: 'metric', type: 'nominal', title: 'metric' },
+      strokeDash: {
+        field: 'metric',
+        type: 'nominal',
+        sort: METRIC_ORDER,
+        title: 'metric',
+      },
+      shape: {
+        field: 'metric',
+        type: 'nominal',
+        sort: METRIC_ORDER,
+        scale: {
+          domain: METRIC_ORDER,
+          range: ['square', 'circle', 'triangle-up'],
+        },
+        title: 'metric',
+      },
       detail: { field: 'metric', type: 'nominal' },
     },
   };

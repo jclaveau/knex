@@ -1,6 +1,7 @@
 'use strict';
 
 const { expect } = require('chai');
+const crypto = require('crypto');
 
 const { TEST_TIMESTAMP } = require('../../../util/constants');
 const {
@@ -1141,6 +1142,59 @@ describe('Updates', function () {
               : undefined;
             await seedAndUpdate('json', columnTypes ? { columnTypes } : {});
           });
+        });
+      });
+
+      describe('batchUpdate binary (blob)', function () {
+        this.timeout(60000);
+
+        beforeEach(async () => {
+          await knex.schema.dropTableIfExists('blobs');
+          await knex.schema.createTable('blobs', (table) => {
+            table.integer('id').primary();
+            table.binary('data');
+          });
+          await knex('blobs').insert([
+            { id: 1, data: Buffer.from('seed-1') },
+            { id: 2, data: Buffer.from('seed-2') },
+          ]);
+        });
+
+        after(async () => {
+          await knex.schema.dropTableIfExists('blobs');
+        });
+
+        // Redshift has no bytea; binary batchUpdate throws there (asserted in the
+        // unit suite). It isn't in the integration matrix, so nothing to skip.
+        for (const mode of ['union', 'case']) {
+          it(`round-trips a large blob in '${mode}' mode`, async function () {
+            // 40 KB > Oracle's 4000-byte inline bind, so this exercises the
+            // per-row LOB fallback there and the native binary bind elsewhere.
+            const updates = [
+              { id: 1, data: crypto.randomBytes(40000) },
+              { id: 2, data: crypto.randomBytes(40000) },
+            ];
+            await knex.batchUpdate('blobs', updates, 'id', { mode });
+
+            const rows = await knex('blobs').orderBy('id');
+            expect(Buffer.from(rows[0].data).equals(updates[0].data)).to.equal(
+              true
+            );
+            expect(Buffer.from(rows[1].data).equals(updates[1].data)).to.equal(
+              true
+            );
+          });
+        }
+
+        it("rejects binary in 'json' mode", function () {
+          expect(() =>
+            knex.batchUpdate(
+              'blobs',
+              [{ id: 1, data: Buffer.from('x') }],
+              'id',
+              { mode: 'json' }
+            )
+          ).to.throw(/does not support binary/);
         });
       });
     });

@@ -508,6 +508,18 @@ describe('batchUpdate (db-less)', function () {
       ).to.throw(/Invalid mode/);
     });
 
+    it("rejects binary (Buffer) values in 'json' mode", function () {
+      // JSON.stringify mangles a Buffer; fail loud instead of corrupting it.
+      expect(() =>
+        clients['pg'].batchUpdate(
+          'users',
+          [{ id: 1, doc: Buffer.from('x') }],
+          'id',
+          { mode: 'json' }
+        )
+      ).to.throw(/does not support binary/);
+    });
+
     it('rejects an invalid key', function () {
       expect(() => clients['pg'].batchUpdate('users', rows, 123)).to.throw(
         /Invalid key/

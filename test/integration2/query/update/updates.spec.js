@@ -1087,6 +1087,61 @@ describe('Updates', function () {
             .first();
           expect(Number(updated.c)).to.equal(600);
         });
+
+        // Large-batch correctness for every mode. These sizes cross each
+        // dialect's per-statement limit — SQLite's 500 compound-SELECT terms and
+        // expression depth, MSSQL's 2098 parameters, Oracle's 4000-byte json bind
+        // — so they exercise the chunk loop and limit handling that the tiny
+        // fixtures above never reach. Every bug the benchmark surfaced lived here.
+        describe('at scale', function () {
+          // Past SQLite's 500-term cap and MSSQL's ~524 rows/chunk, so union and
+          // case span several chunks on the tightest dialects.
+          const SCALE_ROWS = 1200;
+
+          // The set-based statements get large at this size; the per-test 10s
+          // default isn't enough on the networked dialects in CI.
+          this.timeout(60000);
+
+          const seedAndUpdate = async (mode, extraOptions) => {
+            const rows = Array.from({ length: SCALE_ROWS }, (_, i) => ({
+              id: i + 1,
+              name: `old${i + 1}`,
+              age: i,
+            }));
+            await knex.batchInsert('members', rows.slice(3), 100); // 1-3 seeded
+            const updates = rows.map((r) => ({ ...r, name: `new${r.id}` }));
+            await knex.batchUpdate('members', updates, 'id', {
+              mode,
+              ...extraOptions,
+            });
+            const updated = await knex('members')
+              .where('name', 'like', 'new%')
+              .count({ c: 'id' })
+              .first();
+            expect(Number(updated.c)).to.equal(SCALE_ROWS);
+          };
+
+          it('union updates every row across many chunks', async function () {
+            await seedAndUpdate('union', {});
+          });
+
+          it('case updates every row across many chunks', async function () {
+            await seedAndUpdate('case', {});
+          });
+
+          it('json updates every row (CLOB-split payload on oracle)', async function () {
+            // JSON_TABLE / OPENJSON dialects need an explicit type map; pg
+            // infers and SQLite is typeless.
+            const columnTypes = isMysql(knex)
+              ? { id: 'int', name: 'char(255)', age: 'int' }
+              : isMssql(knex)
+              ? { id: 'int', name: 'nvarchar(255)', age: 'int' }
+              : isOracle(knex)
+              ? { id: 'number', name: 'varchar2(255)', age: 'number' }
+              : undefined;
+            await seedAndUpdate('json', columnTypes ? { columnTypes } : {});
+          });
+        });
       });
     });
   });

@@ -171,6 +171,7 @@ async function run() {
   const knex = getKnexForDb(dialect);
 
   console.log(`\n# batchUpdate strategy benchmark — ${dialect}\n`);
+  printModeImages();
   console.log('| rows | cols | mode | SQL bytes | params | chunks | exec ms |');
   console.log('|---:|---:|---|---:|---:|---:|---:|');
 
@@ -224,6 +225,21 @@ async function run() {
   await benchColumnTypes(knex);
 
   await knex.destroy();
+}
+
+// Cross-dialect charts at the top of every job's summary: one per mode, exec ms
+// vs rows with a curve per dialect. They aren't job-specific (every dialect's
+// data), so a single job can't generate them — they're the committed PNGs that
+// scripts/batch-update-charts.js builds from all dialects' JSON. Embedded from
+// the branch head, so they reflect the last committed chart run.
+function printModeImages() {
+  const base =
+    'https://raw.githubusercontent.com/jclaveau/knex/feat/batch-update/scripts/bench-charts';
+  console.log('## exec ms vs rows by dialect, per mode (committed)\n');
+  for (const mode of MODES) {
+    console.log(`![${mode} exec ms by dialect](${base}/mode-${mode}-ms.png)`);
+    console.log('');
+  }
 }
 
 // One graph per dialect in the run summary: embed the committed combined chart

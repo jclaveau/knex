@@ -28,10 +28,14 @@ const MODES = ['union', 'case', 'json'];
 // json auto-splits (json for the metadata + a companion union/per-row for the
 // blob), and Oracle/pgnative take the per-row path.
 const BLOB_MATRIX = [
-  { rows: 100, blobBytes: 1024 },
-  { rows: 100, blobBytes: 16384 },
+  { rows: 100, metaColumns: 3, blobBytes: 1024 },
+  { rows: 100, metaColumns: 3, blobBytes: 16384 },
+  // Wide metadata + a small blob — json's split should win here: the bulk
+  // metadata rides one json parameter (no per-row param explosion, no compound
+  // SELECT / 2098-param chunking) while only the narrow blob takes the companion
+  // union/per-row statement.
+  { rows: 1000, metaColumns: 20, blobBytes: 1024 },
 ];
-const BLOB_META_COLUMNS = ['m0', 'm1', 'm2'];
 
 // The JSON_TABLE / OPENJSON dialects need an explicit type per column for json
 // mode (they can't infer it); Postgres infers and SQLite is typeless, so they
@@ -186,22 +190,25 @@ async function benchBlobs(knex) {
     );
     return;
   }
-  console.log(
-    `\n## blob updates (${BLOB_META_COLUMNS.length} metadata cols + 1 blob)\n`
-  );
-  console.log('| rows | blob bytes | mode | exec ms |');
-  console.log('|---:|---:|---|---:|');
-  const metaTypes = jsonColumnTypesFor(knex, BLOB_META_COLUMNS);
+  console.log('\n## blob updates (metadata cols + 1 blob)\n');
+  console.log('| rows | meta cols | blob bytes | mode | exec ms |');
+  console.log('|---:|---:|---:|---|---:|');
   const limit = knex.client.maxBindParameters || Infinity;
-  const insertChunk = Math.max(
-    1,
-    Math.min(50, Math.floor(limit / (BLOB_META_COLUMNS.length + 2)))
-  );
-  for (const { rows: rowCount, blobBytes } of BLOB_MATRIX) {
+  for (const {
+    rows: rowCount,
+    metaColumns: metaCount,
+    blobBytes,
+  } of BLOB_MATRIX) {
+    const metaColumns = Array.from({ length: metaCount }, (_, i) => `m${i}`);
+    const metaTypes = jsonColumnTypesFor(knex, metaColumns);
+    const insertChunk = Math.max(
+      1,
+      Math.min(50, Math.floor(limit / (metaColumns.length + 2)))
+    );
     await knex.schema.dropTableIfExists('bench_blobs');
     await knex.schema.createTable('bench_blobs', (table) => {
       table.integer('id').primary();
-      for (const column of BLOB_META_COLUMNS) {
+      for (const column of metaColumns) {
         table.string(column);
       }
       table.binary('data');
@@ -209,7 +216,7 @@ async function benchBlobs(knex) {
     const seed = [];
     for (let id = 1; id <= rowCount; id++) {
       const row = { id, data: Buffer.alloc(blobBytes, id % 256) };
-      for (const column of BLOB_META_COLUMNS) {
+      for (const column of metaColumns) {
         row[column] = `${column}-${id}`;
       }
       seed.push(row);
@@ -220,7 +227,7 @@ async function benchBlobs(knex) {
       try {
         const updates = seed.map((row) => {
           const next = { id: row.id, data: crypto.randomBytes(blobBytes) };
-          for (const column of BLOB_META_COLUMNS) {
+          for (const column of metaColumns) {
             next[column] = `${column}-updated-${row.id}`;
           }
           return next;
@@ -235,7 +242,9 @@ async function benchBlobs(knex) {
       } catch (error) {
         ms = `ERR: ${error.message.split(' - ').pop().slice(0, 45)}`;
       }
-      console.log(`| ${rowCount} | ${blobBytes} | ${mode} | ${ms} |`);
+      console.log(
+        `| ${rowCount} | ${metaCount} | ${blobBytes} | ${mode} | ${ms} |`
+      );
     }
   }
   await knex.schema.dropTableIfExists('bench_blobs');

@@ -2,8 +2,9 @@
 
 // Renders the batchUpdate benchmark numbers as committed SVG charts for the PR /
 // report — log-log scaling curves where Mermaid can't (no legend, stroke styles,
-// or log axes). One graph per dialect gathers all nine curves (exec ms + bound
-// params + chunks × the three modes), plus a faceted exec-ms overview.
+// or log axes). One chart per mode (exec ms, a curve per dialect), one graph per
+// dialect gathering all nine curves (exec ms + bound params + chunks × the three
+// modes), plus a faceted exec-ms overview.
 //
 // No repo dependency: run it with vega/vega-lite supplied by npx, e.g.
 //   npx --yes -p vega@5 -p vega-lite@5 node scripts/batch-update-charts.js \
@@ -125,6 +126,39 @@ async function main() {
   const records = loadRecords(dataPath);
   const sweep = records.filter((r) => r.cols === 3); // the row-count sweep
   const dialects = [...new Set(sweep.map((r) => r.dialect))];
+
+  // One chart per mode: exec ms vs rows, a curve per dialect (colour = dialect).
+  for (const mode of MODE_ORDER) {
+    const values = sweep.filter((r) => r.mode === mode);
+    const svg = await toSvg({
+      $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
+      title: `batchUpdate '${mode}' — exec ms vs rows by dialect (cols=3, log-log)`,
+      width: 520,
+      height: 340,
+      background: 'white',
+      data: { values },
+      mark: { type: 'line', point: { size: 70, filled: true }, strokeWidth: 2 },
+      encoding: {
+        x: {
+          field: 'rows',
+          type: 'quantitative',
+          scale: { type: 'log' },
+          title: 'rows (log)',
+        },
+        y: {
+          field: 'ms',
+          type: 'quantitative',
+          scale: { type: 'log' },
+          title: 'exec ms (log)',
+        },
+        color: { field: 'dialect', type: 'nominal', title: 'dialect' },
+        detail: { field: 'dialect', type: 'nominal' },
+      },
+    });
+    const file = path.join(outDir, `mode-${mode}-ms.svg`);
+    fs.writeFileSync(file, svg);
+    console.log(`wrote ${file}`);
+  }
 
   for (const dialect of dialects) {
     const values = toLongForm(sweep.filter((r) => r.dialect === dialect));

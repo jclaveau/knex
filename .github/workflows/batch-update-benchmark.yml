@@ -32,15 +32,7 @@ jobs:
         # One bench per dialect; node is pinned to 22.x (mariadb's client needs
         # 20+, and the bench doesn't vary by node). sqlite3 needs no server.
         database-type:
-          [
-            postgres,
-            mysql,
-            mariadb,
-            mssql,
-            cockroachdb,
-            oracledb,
-            sqlite3,
-          ]
+          [postgres, mysql, mariadb, mssql, cockroachdb, oracledb, sqlite3]
 
     steps:
       - name: Checkout Repository

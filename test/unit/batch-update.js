@@ -538,22 +538,25 @@ describe('batchUpdate (db-less)', function () {
       ).to.throw(/Invalid columnTypes\.name/);
     });
 
-    it('accepts parameterized and array type names', function () {
+    it('interpolates parameterized and array type names into the casts', function () {
       for (const type of ['text[]', 'varchar(255)', 'numeric(10, 2)']) {
-        // No DB here: assert construction doesn't throw, swallow the async run.
-        const op = clients['pg'].batchUpdate('users', rows, 'id', {
-          columnTypes: { name: type },
-        });
-        op.catch(() => {});
+        const { sql } = clients['pg']('users')
+          .batchUpdate(rows, ['id'], ['name', 'age'], { name: type })
+          .toSQL();
+        expect(sql).to.contain(`?::${type} as "name"`);
       }
     });
 
     it("accepts the 'from_data' and 'from_db' columnTypes strategies", function () {
+      // These strategies resolve in the executor (from_db reads columnInfo), so
+      // they can't be asserted via toSQL here — only that the synchronous option
+      // validation accepts them. Real SQL/DML coverage is in the integration suite.
       for (const columnTypes of ['from_data', 'from_db']) {
-        const op = clients['pg'].batchUpdate('users', rows, 'id', {
-          columnTypes,
-        });
-        op.catch(() => {});
+        expect(() =>
+          clients['pg']
+            .batchUpdate('users', rows, 'id', { columnTypes })
+            .catch(() => {})
+        ).to.not.throw();
       }
     });
 

@@ -887,15 +887,20 @@ describe('Updates', function () {
         });
 
         it('updates across multiple chunks', async function () {
-          await knex.batchUpdate(
+          const result = await knex.batchUpdate(
             'members',
             [
               { id: 1, name: 'c1', age: 100 },
               { id: 2, name: 'c2', age: 200 },
             ],
             'id',
-            1 // one row per chunk -> two statements in one transaction
+            { chunkSize: 1 } // one row per chunk -> two statements in one transaction
           );
+          // The postgres family reports an affected-row count per chunk; flattened
+          // that is one entry per statement (here 1 row each, two chunks).
+          if (isPostgreSQL(knex) || isCockroachDB(knex)) {
+            expect(result).to.eql([1, 1]);
+          }
           const rows = await knex('members')
             .whereIn('id', [1, 2])
             .orderBy('id');

@@ -322,6 +322,17 @@ async function run() {
 function printModeImages() {
   const base =
     'https://raw.githubusercontent.com/jclaveau/knex/feat/batch-update/scripts/bench-charts';
+  // Lead with the cross-dialect summary: 3 curves (one per mode), exec ms
+  // normalized to each dialect's union baseline and geomean-aggregated, so the
+  // whole-picture "which mode wins overall" reads at a glance (1.0 = union,
+  // lower = faster; the shaded band is the geometric spread across dialects).
+  console.log(
+    '## exec time vs union baseline — geomean across dialects (committed)\n'
+  );
+  console.log(
+    `![exec ms vs union, geomean across dialects](${base}/mode-aggregate-ms.png)`
+  );
+  console.log('');
   console.log('## exec ms vs rows by dialect, per mode (committed)\n');
   for (const mode of MODES) {
     console.log(`![${mode} exec ms by dialect](${base}/mode-${mode}-ms.png)`);

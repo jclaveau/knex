@@ -2,9 +2,10 @@
 
 // Renders the batchUpdate benchmark numbers as committed SVG charts for the PR /
 // report — log-log scaling curves where Mermaid can't (no legend, stroke styles,
-// or log axes). One chart per mode (exec ms, a curve per dialect), one graph per
-// dialect gathering all nine curves (exec ms + bound params + chunks × the three
-// modes), plus a faceted exec-ms overview.
+// or log axes). A cross-dialect summary (3 curves, one per mode, exec ms
+// geomean-normalized to each dialect's union baseline), one chart per mode (exec
+// ms, a curve per dialect), one graph per dialect gathering all nine curves (exec
+// ms + bound params + chunks × the three modes), plus a faceted exec-ms overview.
 //
 // No repo dependency: run it with vega/vega-lite supplied by npx, e.g.
 //   npx --yes -p vega@5 -p vega-lite@5 node scripts/batch-update-charts.js \
@@ -92,6 +93,114 @@ function dialectSpec({ dialect, values }) {
   };
 }
 
+// Aggregate across dialects into one curve per mode. Absolute exec ms can't be
+// averaged across dialects — they live on different scales (embedded SQLite vs a
+// networked Oracle/CockroachDB), so an arithmetic mean of ms just tracks the
+// slowest dialect and buries the mode effect. Instead normalize each mode to that
+// dialect's own union baseline (same rows), then take the GEOMETRIC mean of the
+// ratios: the correct central tendency for normalized/multiplicative numbers
+// (Fleming–Wallace) and reference-direction invariant, unlike the arithmetic mean
+// of ratios. A geometric stdev factor gives the spread band — one mode that wins
+// big on one dialect and ties elsewhere shows as a wide band, not a misleading
+// single line. union is 1.0 by construction (its own baseline).
+function aggregateByMode(sweep) {
+  const ms = new Map();
+  for (const r of sweep) ms.set(`${r.dialect}|${r.rows}|${r.mode}`, r.ms);
+  const rowCounts = [...new Set(sweep.map((r) => r.rows))].sort(
+    (a, b) => a - b
+  );
+  const dialects = [...new Set(sweep.map((r) => r.dialect))];
+  const out = [];
+  for (const mode of MODE_ORDER) {
+    for (const rows of rowCounts) {
+      const logRatios = [];
+      for (const dialect of dialects) {
+        const baseline = ms.get(`${dialect}|${rows}|union`);
+        const value = ms.get(`${dialect}|${rows}|${mode}`);
+        // Need both this mode and its union baseline for the same dialect+rows;
+        // skip the dialect at this row count otherwise (e.g. union ERR'd).
+        if (baseline > 0 && value > 0)
+          logRatios.push(Math.log(value / baseline));
+      }
+      if (logRatios.length === 0) continue;
+      const meanLog = logRatios.reduce((a, b) => a + b, 0) / logRatios.length;
+      const geomean = Math.exp(meanLog);
+      const varLog =
+        logRatios.reduce((a, b) => a + (b - meanLog) ** 2, 0) /
+        logRatios.length;
+      const gsd = Math.exp(Math.sqrt(varLog)); // geometric stdev factor
+      out.push({
+        rows,
+        mode,
+        ratio: geomean,
+        lo: geomean / gsd,
+        hi: geomean * gsd,
+        dialects: logRatios.length,
+      });
+    }
+  }
+  return out;
+}
+
+// The cross-dialect summary chart: 3 curves (one per mode), exec ms normalized to
+// each dialect's union baseline and geomean-aggregated, with the geometric-stdev
+// band shaded. The dashed rule at 1.0 is union (the baseline); below it = faster.
+function aggregateSpec(values) {
+  const x = {
+    field: 'rows',
+    type: 'quantitative',
+    scale: { type: 'log' },
+    title: 'rows (log)',
+  };
+  const color = {
+    field: 'mode',
+    type: 'nominal',
+    sort: MODE_ORDER,
+    title: 'mode',
+  };
+  return {
+    $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
+    title:
+      'batchUpdate exec time vs union baseline — geomean across dialects (1.0 = union, lower = faster)',
+    width: 520,
+    height: 340,
+    background: 'white',
+    data: { values },
+    layer: [
+      {
+        mark: { type: 'errorband', opacity: 0.15 },
+        encoding: {
+          x,
+          y: {
+            field: 'lo',
+            type: 'quantitative',
+            scale: { type: 'log' },
+            title: 'exec ms ÷ union (geomean, log)',
+          },
+          y2: { field: 'hi' },
+          color,
+        },
+      },
+      {
+        mark: {
+          type: 'line',
+          point: { size: 70, filled: true },
+          strokeWidth: 2,
+        },
+        encoding: {
+          x,
+          y: { field: 'ratio', type: 'quantitative', scale: { type: 'log' } },
+          color,
+        },
+      },
+      {
+        mark: { type: 'rule', strokeDash: [4, 4], color: '#888' },
+        encoding: { y: { datum: 1, type: 'quantitative' } },
+      },
+    ],
+  };
+}
+
 // Long-form rows for the combined chart: one record per (mode, metric, rows).
 function toLongForm(records) {
   const long = [];
@@ -126,6 +235,13 @@ async function main() {
   const records = loadRecords(dataPath);
   const sweep = records.filter((r) => r.cols === 3); // the row-count sweep
   const dialects = [...new Set(sweep.map((r) => r.dialect))];
+
+  // Cross-dialect summary: one curve per mode, geomean-normalized to union.
+  const aggregate = aggregateByMode(sweep);
+  const aggregateSvg = await toSvg(aggregateSpec(aggregate));
+  const aggregateFile = path.join(outDir, 'mode-aggregate-ms.svg');
+  fs.writeFileSync(aggregateFile, aggregateSvg);
+  console.log(`wrote ${aggregateFile}`);
 
   // One chart per mode: exec ms vs rows, a curve per dialect (colour = dialect).
   for (const mode of MODE_ORDER) {

@@ -9,6 +9,24 @@ node scripts/batch-update-benchmark.js            # sqlite3, in-memory (all 3 mo
 node scripts/batch-update-benchmark.js pg         # set PG_URL
 ```
 
+## Cross-dialect summary
+
+One curve per mode, every dialect folded in. Absolute exec ms can't be averaged
+across dialects — embedded SQLite and a networked Oracle/CockroachDB live on
+different scales, so a raw mean just tracks the slowest engine. Instead each
+mode's exec ms is normalized to **that dialect's own `union` baseline** at the
+same row count, then aggregated with the **geometric mean** of the ratios (the
+right central tendency for normalized/multiplicative numbers, and invariant to
+which mode is the reference). The shaded band is the geometric standard
+deviation — the spread across dialects, so a mode that wins big on one engine and
+ties on another reads honestly instead of collapsing to a single line.
+
+![exec ms vs union baseline, geomean across dialects](https://raw.githubusercontent.com/jclaveau/knex/feat/batch-update/scripts/bench-charts/mode-aggregate-ms.png)
+
+`1.0` is `union` (its own baseline); below the line is faster. `json` sits at
+~0.25–0.4× union across the whole sweep; `case` starts competitive but climbs
+past 1.0 as batches grow.
+
 ## What each mode emits
 
 - **union** (default) — `UPDATE … FROM (SELECT … UNION ALL …) v WHERE t.k = v.k`

@@ -58,6 +58,15 @@ function jsonColumnTypesFor(knex, columns) {
 }
 
 const MATRIX = [
+  // Small tiers — the everyday case (updating a handful of rows) far outweighs
+  // bulk imports, so the curves need points down here where per-statement
+  // overhead, not chunking, dominates.
+  { rows: 3, cols: 3 },
+  { rows: 5, cols: 3 },
+  { rows: 10, cols: 3 },
+  { rows: 20, cols: 3 },
+  { rows: 50, cols: 3 },
+  { rows: 80, cols: 3 },
   { rows: 100, cols: 3 },
   { rows: 1000, cols: 3 },
   { rows: 1000, cols: 20 },

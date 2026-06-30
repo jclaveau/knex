@@ -23,6 +23,12 @@ ties on another reads honestly instead of collapsing to a single line.
 
 ![exec ms vs union baseline, geomean across dialects](https://raw.githubusercontent.com/jclaveau/knex/feat/batch-update/scripts/bench-charts/mode-aggregate-ms.png)
 
+_Type detection is excluded as a one-time, cacheable cost._ Every mode times the
+"types already known" steady state: union and json pass pre-resolved column types
+(as a caller would cache and reuse), so neither the `from_db` schema lookup
+(`columnInfo()`, one round-trip) nor the per-batch `from_data` cast inference is
+charged to the curve.
+
 `1.0` is `union` (its own baseline); below the line is faster. `json` sits at
 ~0.25–0.4× union across the whole sweep; `case` starts competitive but climbs
 past 1.0 as batches grow.

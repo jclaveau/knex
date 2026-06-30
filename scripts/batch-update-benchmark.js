@@ -57,6 +57,23 @@ function jsonColumnTypesFor(knex, columns) {
   return types;
 }
 
+// Pre-resolved cast types for union on the Postgres family, so the timed call
+// uses cached types instead of inferring them per batch — the cast-detection a
+// real caller resolves once and reuses stays out of the numbers. Mirrors the
+// compiler's own inference for this batch (numeric key, text columns), so the
+// emitted SQL is byte-identical; only the per-call inference walk drops out.
+// Other dialects don't cast the union source, so they pass no map.
+function unionCastTypesFor(knex, columns) {
+  if (knex.client.dialect !== 'postgresql') {
+    return undefined;
+  }
+  const types = { id: 'numeric' };
+  for (const column of columns) {
+    types[column] = 'text';
+  }
+  return types;
+}
+
 const MATRIX = [
   // Small tiers — the everyday case (updating a handful of rows) far outweighs
   // bulk imports, so the curves need points down here where per-statement
@@ -274,6 +291,7 @@ async function run() {
   for (const { rows: rowCount, cols: colCount } of MATRIX) {
     const { columns, rows } = buildBatch(rowCount, colCount);
     const jsonColumnTypes = jsonColumnTypesFor(knex, columns);
+    const unionColumnTypes = unionCastTypesFor(knex, columns);
     for (const mode of MODES) {
       let line;
       try {
@@ -290,7 +308,11 @@ async function run() {
           columns,
           rows,
           mode,
-          mode === 'json' ? jsonColumnTypes : undefined
+          mode === 'json'
+            ? jsonColumnTypes
+            : mode === 'union'
+            ? unionColumnTypes
+            : undefined
         );
         results.push({
           rowCount,

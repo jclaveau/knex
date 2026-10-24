@@ -178,7 +178,8 @@ async function timeExecution(knex, columns, rows, mode, columnTypes) {
 
 // Isolates the cost of the columnTypes strategies. 'from_db' adds one
 // columnInfo round-trip per call; 'from_data' (the default) adds nothing.
-// Run on the 'json' strategy because it accepts columnTypes on sqlite/pg.
+// Run on 'json' where it accepts columnTypes (sqlite), else on 'union' (the
+// Postgres family, whose json form takes the table row type instead).
 async function benchColumnTypes(knex) {
   // from_data / from_db only apply where types are inferred (Postgres family) or
   // ignored (SQLite); the JSON_TABLE/OPENJSON dialects need an explicit map.
@@ -189,14 +190,15 @@ async function benchColumnTypes(knex) {
     return;
   }
   const { columns, rows } = buildBatch(1000, 5);
-  console.log('\n## columnTypes strategy overhead (json, 1000×5)\n');
+  const mode = knex.client.batchUpdateJsonTakesColumnTypes() ? 'json' : 'union';
+  console.log(`\n## columnTypes strategy overhead (${mode}, 1000×5)\n`);
   console.log('| columnTypes | exec ms |');
   console.log('|---|---:|');
   for (const columnTypes of ['from_data', 'from_db']) {
     let ms;
     try {
       ms = (
-        await timeExecution(knex, columns, rows, 'json', columnTypes)
+        await timeExecution(knex, columns, rows, mode, columnTypes)
       ).toFixed(1);
     } catch (error) {
       ms = `ERR: ${error.message.split(' - ').pop().slice(0, 50)}`;

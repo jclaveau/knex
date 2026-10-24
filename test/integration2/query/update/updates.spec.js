@@ -1,13 +1,17 @@
 'use strict';
 
 const { expect } = require('chai');
+const crypto = require('crypto');
 
 const { TEST_TIMESTAMP } = require('../../../util/constants');
 const {
   isPostgreSQL,
   isMysql,
   isMariaDB,
+  isMssql,
   isOracle,
+  isCockroachDB,
+  isSQLite,
 } = require('../../../util/db-helpers');
 const {
   getAllDbs,
@@ -741,6 +745,495 @@ describe('Updates', function () {
               2
             );
           });
+      });
+
+      describe('batchUpdate', function () {
+        beforeEach(async () => {
+          await knex.schema.dropTableIfExists('members');
+          await knex.schema.createTable('members', (table) => {
+            table.integer('id').primary();
+            table.string('name');
+            table.integer('age');
+          });
+          await knex('members').insert([
+            { id: 1, name: 'old1', age: 1 },
+            { id: 2, name: 'old2', age: 2 },
+            { id: 3, name: 'decoy', age: 99 },
+          ]);
+        });
+
+        after(async () => {
+          await knex.schema.dropTableIfExists('members');
+        });
+
+        it('updates each row to its own values and leaves other rows untouched', async function () {
+          await knex.batchUpdate('members', [
+            { id: 1, name: 'new1', age: 11 },
+            { id: 2, name: 'new2', age: 22 },
+          ]);
+
+          const rows = await knex('members').orderBy('id');
+          // Number() coerces CockroachDB's int-as-string columns.
+          expect(rows.map((r) => [Number(r.id), r.name, Number(r.age)])).to.eql(
+            [
+              [1, 'new1', 11],
+              [2, 'new2', 22],
+              [3, 'decoy', 99], // outside the batch — must be unchanged
+            ]
+          );
+        });
+
+        it("updates each row to its own values with mode: 'case'", async function () {
+          await knex.batchUpdate(
+            'members',
+            [
+              { id: 1, name: 'new1', age: 11 },
+              { id: 2, name: 'new2', age: 22 },
+            ],
+            'id',
+            { mode: 'case' }
+          );
+
+          const rows = await knex('members').orderBy('id');
+          expect(rows.map((r) => [Number(r.id), r.name, Number(r.age)])).to.eql(
+            [
+              [1, 'new1', 11],
+              [2, 'new2', 22],
+              [3, 'decoy', 99], // outside the batch — must be unchanged
+            ]
+          );
+        });
+
+        it("updates each row to its own values with mode: 'json'", async function () {
+          // Postgres/CockroachDB (jsonb_to_recordset) infer types and SQLite is
+          // typeless; the JSON_TABLE/OPENJSON dialects need an explicit map.
+          const options = { mode: 'json' };
+          if (isMysql(knex)) {
+            options.columnTypes = {
+              id: 'int',
+              name: 'char(255)',
+              age: 'int',
+            };
+          } else if (isMssql(knex)) {
+            options.columnTypes = {
+              id: 'int',
+              name: 'nvarchar(255)',
+              age: 'int',
+            };
+          } else if (isOracle(knex)) {
+            options.columnTypes = {
+              id: 'number',
+              name: 'varchar2(255)',
+              age: 'number',
+            };
+          }
+          await knex.batchUpdate(
+            'members',
+            [
+              { id: 1, name: 'new1', age: 11 },
+              { id: 2, name: 'new2', age: 22 },
+            ],
+            'id',
+            options
+          );
+
+          const rows = await knex('members').orderBy('id');
+          expect(rows.map((r) => [Number(r.id), r.name, Number(r.age)])).to.eql(
+            [
+              [1, 'new1', 11],
+              [2, 'new2', 22],
+              [3, 'decoy', 99], // outside the batch — must be unchanged
+            ]
+          );
+        });
+
+        it("resolves columnTypes from the schema with 'from_db'", async function () {
+          // from_db reads types via columnInfo; exercised on the json path,
+          // which consumes columnTypes on postgres/sqlite.
+          if (!(isPostgreSQL(knex) || isSQLite(knex))) {
+            return this.skip();
+          }
+          await knex.batchUpdate(
+            'members',
+            [
+              { id: 1, name: 'fromdb1', age: 11 },
+              { id: 2, name: 'fromdb2', age: 22 },
+            ],
+            'id',
+            { mode: 'json', columnTypes: 'from_db' }
+          );
+
+          const rows = await knex('members').orderBy('id');
+          expect(rows.map((r) => [Number(r.id), r.name, Number(r.age)])).to.eql(
+            [
+              [1, 'fromdb1', 11],
+              [2, 'fromdb2', 22],
+              [3, 'decoy', 99],
+            ]
+          );
+        });
+
+        it('returns the requested columns on postgres-family dialects', async function () {
+          if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+            return this.skip();
+          }
+          const result = await knex
+            .batchUpdate('members', [{ id: 1, name: 'ret', age: 5 }])
+            .returning(['id', 'name']);
+          expect(result.length).to.equal(1);
+          expect(result[0].name).to.equal('ret');
+          // CockroachDB returns INT columns as strings
+          assertNumber(knex, result[0].id, 1);
+        });
+
+        it('updates across multiple chunks', async function () {
+          const result = await knex.batchUpdate(
+            'members',
+            [
+              { id: 1, name: 'c1', age: 100 },
+              { id: 2, name: 'c2', age: 200 },
+            ],
+            'id',
+            { chunkSize: 1 } // one row per chunk -> two statements in one transaction
+          );
+          // The postgres family reports an affected-row count per chunk; flattened
+          // that is one entry per statement (here 1 row each, two chunks).
+          if (isPostgreSQL(knex) || isCockroachDB(knex)) {
+            expect(result).to.eql([1, 1]);
+          }
+          const rows = await knex('members')
+            .whereIn('id', [1, 2])
+            .orderBy('id');
+          expect(rows.map((r) => r.name)).to.eql(['c1', 'c2']);
+        });
+
+        it('runs ceil(rows / chunkSize) set-based statements', async function () {
+          const statements = [];
+          const onQuery = (query) => {
+            // count the data statements only, not BEGIN/COMMIT
+            if (/^\s*(update|merge)\s/i.test(query.sql)) {
+              statements.push(query.sql);
+            }
+          };
+          const threeRows = [
+            { id: 1, name: 's1', age: 1 },
+            { id: 2, name: 's2', age: 2 },
+            { id: 3, name: 's3', age: 3 },
+          ];
+
+          // 3 rows, chunkSize 2 -> ceil(3/2) = 2 statements
+          knex.on('query', onQuery);
+          await knex.batchUpdate('members', threeRows, 'id', { chunkSize: 2 });
+          knex.off('query', onQuery);
+          expect(statements).to.have.lengthOf(2);
+
+          // 3 rows, single (default) chunk -> 1 statement
+          statements.length = 0;
+          knex.on('query', onQuery);
+          await knex.batchUpdate('members', threeRows, 'id');
+          knex.off('query', onQuery);
+          expect(statements).to.have.lengthOf(1);
+        });
+
+        it('supports a composite key', async function () {
+          await knex.schema.dropTableIfExists('memberships');
+          await knex.schema.createTable('memberships', (table) => {
+            table.integer('tenant');
+            table.integer('id');
+            table.string('name');
+            table.primary(['tenant', 'id']);
+          });
+          await knex('memberships').insert([
+            { tenant: 7, id: 1, name: 'a' },
+            { tenant: 7, id: 2, name: 'b' },
+            { tenant: 8, id: 1, name: 'other-tenant' },
+          ]);
+
+          await knex.batchUpdate(
+            'memberships',
+            [
+              { tenant: 7, id: 1, name: 'A' },
+              { tenant: 7, id: 2, name: 'B' },
+            ],
+            ['tenant', 'id']
+          );
+
+          const rows = await knex('memberships').orderBy(['tenant', 'id']);
+          // Number() coerces CockroachDB's int-as-string columns.
+          expect(
+            rows.map((r) => [Number(r.tenant), Number(r.id), r.name])
+          ).to.eql([
+            [7, 1, 'A'],
+            [7, 2, 'B'],
+            [8, 1, 'other-tenant'], // same id, different tenant — untouched
+          ]);
+          await knex.schema.dropTableIfExists('memberships');
+        });
+
+        it('rolls everything back when the caller transaction is rolled back', async function () {
+          await knex
+            .transaction(async (trx) => {
+              await knex
+                .batchUpdate('members', [{ id: 1, name: 'doomed', age: 0 }])
+                .transacting(trx);
+              throw new Error('force rollback');
+            })
+            .catch(() => {});
+
+          const row = await knex('members').where('id', 1).first();
+          expect(row.name).to.equal('old1'); // rollback reverted the update
+        });
+
+        it('validates the chunkSize parameter', function () {
+          expect(() =>
+            knex.batchUpdate('members', [{ id: 1, name: 'x' }], 'id', {
+              chunkSize: 0,
+            })
+          ).to.throw('Invalid chunkSize: 0');
+        });
+
+        it('keeps the last row when a key is duplicated (last-write-wins)', async function () {
+          await knex.batchUpdate('members', [
+            { id: 1, name: 'first', age: 1 },
+            { id: 1, name: 'last', age: 2 },
+          ]);
+          const row = await knex('members').where('id', 1).first();
+          expect(row.name).to.equal('last');
+          assertNumber(knex, row.age, 2);
+        });
+
+        it('throws on a duplicate key with onDuplicateKey: throw', function () {
+          expect(() =>
+            knex.batchUpdate(
+              'members',
+              [
+                { id: 1, name: 'a', age: 1 },
+                { id: 1, name: 'b', age: 2 },
+              ],
+              'id',
+              { onDuplicateKey: 'throw' }
+            )
+          ).to.throw(/duplicate key/);
+        });
+
+        it('caps the chunk to the dialect bind-parameter limit', async function () {
+          const rows = Array.from({ length: 10 }, (_, i) => ({
+            id: i + 1,
+            name: `n${i + 1}`,
+            age: i,
+          }));
+          await knex('members').insert(rows.slice(3)); // 1-3 seeded already
+
+          // Force a tiny limit: 6 params / 3 cells per row = 2 rows per chunk,
+          // so 10 rows must split into ceil(10 / 2) = 5 statements regardless
+          // of the (default 1000) chunkSize.
+          const original = knex.client.maxBindParameters;
+          knex.client.maxBindParameters = 6;
+          const statements = [];
+          const onQuery = (query) => {
+            if (/^\s*(update|merge)\s/i.test(query.sql)) {
+              statements.push(query.sql);
+            }
+          };
+          knex.on('query', onQuery);
+          try {
+            await knex.batchUpdate(
+              'members',
+              rows.map((r) => ({ ...r, name: 'capped' }))
+            );
+          } finally {
+            knex.off('query', onQuery);
+            knex.client.maxBindParameters = original;
+          }
+
+          expect(statements).to.have.lengthOf(5);
+          const updated = await knex('members')
+            .where('name', 'capped')
+            .count({ c: 'id' })
+            .first();
+          expect(Number(updated.c)).to.equal(10);
+        });
+
+        it("splits a union batch under SQLite's compound-SELECT term cap", async function () {
+          // union emits one UNION ALL term per row; SQLite caps a compound SELECT
+          // at 500 terms, well under the bind-parameter cap. Without the
+          // per-dialect row cap a 600-row batch fails to compile ("too many terms
+          // in compound SELECT"); with it, it splits into ceil(600 / 500) = 2.
+          if (!isSQLite(knex)) {
+            return this.skip();
+          }
+          const rows = Array.from({ length: 600 }, (_, i) => ({
+            id: i + 1,
+            name: `n${i + 1}`,
+            age: i,
+          }));
+          // batchInsert (chunked) to seed — a single 597-row insert would hit the
+          // same compound-SELECT cap.
+          await knex.batchInsert('members', rows.slice(3), 100); // 1-3 seeded
+          const statements = [];
+          const onQuery = (query) => {
+            if (/^\s*update\s/i.test(query.sql)) {
+              statements.push(query.sql);
+            }
+          };
+          knex.on('query', onQuery);
+          try {
+            await knex.batchUpdate(
+              'members',
+              rows.map((r) => ({ ...r, name: 'big' }))
+            );
+          } finally {
+            knex.off('query', onQuery);
+          }
+
+          expect(statements).to.have.lengthOf(2);
+          const updated = await knex('members')
+            .where('name', 'big')
+            .count({ c: 'id' })
+            .first();
+          expect(Number(updated.c)).to.equal(600);
+        });
+
+        // Large-batch correctness for every mode. These sizes cross each
+        // dialect's per-statement limit — SQLite's 500 compound-SELECT terms and
+        // expression depth, MSSQL's 2098 parameters, Oracle's 4000-byte json bind
+        // — so they exercise the chunk loop and limit handling that the tiny
+        // fixtures above never reach. Every bug the benchmark surfaced lived here.
+        describe('at scale', function () {
+          // Past SQLite's 500-term cap and MSSQL's ~524 rows/chunk, so union and
+          // case span several chunks on the tightest dialects.
+          const SCALE_ROWS = 1200;
+
+          // The set-based statements get large at this size; the per-test 10s
+          // default isn't enough on the networked dialects in CI.
+          this.timeout(60000);
+
+          const seedAndUpdate = async (mode, extraOptions) => {
+            const rows = Array.from({ length: SCALE_ROWS }, (_, i) => ({
+              id: i + 1,
+              name: `old${i + 1}`,
+              age: i,
+            }));
+            await knex.batchInsert('members', rows.slice(3), 100); // 1-3 seeded
+            const updates = rows.map((r) => ({ ...r, name: `new${r.id}` }));
+            await knex.batchUpdate('members', updates, 'id', {
+              mode,
+              ...extraOptions,
+            });
+            const updated = await knex('members')
+              .where('name', 'like', 'new%')
+              .count({ c: 'id' })
+              .first();
+            expect(Number(updated.c)).to.equal(SCALE_ROWS);
+          };
+
+          it('union updates every row across many chunks', async function () {
+            await seedAndUpdate('union', {});
+          });
+
+          it('case updates every row across many chunks', async function () {
+            await seedAndUpdate('case', {});
+          });
+
+          it('json updates every row (CLOB-split payload on oracle)', async function () {
+            // JSON_TABLE / OPENJSON dialects need an explicit type map; pg
+            // infers and SQLite is typeless.
+            const columnTypes = isMysql(knex)
+              ? { id: 'int', name: 'char(255)', age: 'int' }
+              : isMssql(knex)
+              ? { id: 'int', name: 'nvarchar(255)', age: 'int' }
+              : isOracle(knex)
+              ? { id: 'number', name: 'varchar2(255)', age: 'number' }
+              : undefined;
+            await seedAndUpdate('json', columnTypes ? { columnTypes } : {});
+          });
+        });
+      });
+
+      describe('batchUpdate binary (blob)', function () {
+        this.timeout(60000);
+
+        before(function () {
+          // pg-native (libpq, text protocol) can't bind an arbitrary Buffer to
+          // bytea — postgres reads the text as a bytea escape literal and rejects
+          // non-escape bytes. A driver limitation, not batchUpdate-specific.
+          if (knex.client.driverName === 'pgnative') {
+            this.skip();
+          }
+        });
+
+        beforeEach(async () => {
+          await knex.schema.dropTableIfExists('blobs');
+          await knex.schema.createTable('blobs', (table) => {
+            table.integer('id').primary();
+            table.string('label');
+            table.binary('data');
+          });
+          await knex('blobs').insert([
+            { id: 1, label: 'seed', data: Buffer.from('seed-1') },
+            { id: 2, label: 'seed', data: Buffer.from('seed-2') },
+          ]);
+        });
+
+        after(async () => {
+          await knex.schema.dropTableIfExists('blobs');
+        });
+
+        const jsonLabelType = () =>
+          isMysql(knex)
+            ? { id: 'int', label: 'char(255)' }
+            : isMssql(knex)
+            ? { id: 'int', label: 'nvarchar(255)' }
+            : isOracle(knex)
+            ? { id: 'number', label: 'varchar2(255)' }
+            : undefined;
+
+        // Redshift has no bytea; binary batchUpdate throws there. It isn't in the
+        // integration matrix, so nothing to skip.
+        for (const mode of ['union', 'case']) {
+          it(`round-trips a large blob in '${mode}' mode`, async function () {
+            // 40 KB > Oracle's 4000-byte inline bind, so this exercises the
+            // per-row LOB fallback there and the native binary bind elsewhere.
+            const updates = [
+              { id: 1, label: 'a', data: crypto.randomBytes(40000) },
+              { id: 2, label: 'b', data: crypto.randomBytes(40000) },
+            ];
+            await knex.batchUpdate('blobs', updates, 'id', { mode });
+
+            const rows = await knex('blobs').orderBy('id');
+            expect(rows.map((r) => r.label)).to.eql(['a', 'b']);
+            expect(Buffer.from(rows[0].data).equals(updates[0].data)).to.equal(
+              true
+            );
+            expect(Buffer.from(rows[1].data).equals(updates[1].data)).to.equal(
+              true
+            );
+          });
+        }
+
+        it('json mode auto-splits: json for the label, union/per-row for the blob', async function () {
+          // json can't carry a Buffer, so the executor updates `label` with a
+          // json statement and `data` with a companion binary statement, both
+          // keyed, in one transaction.
+          const columnTypes = jsonLabelType();
+          const updates = [
+            { id: 1, label: 'json-1', data: crypto.randomBytes(40000) },
+            { id: 2, label: 'json-2', data: crypto.randomBytes(40000) },
+          ];
+          await knex.batchUpdate('blobs', updates, 'id', {
+            mode: 'json',
+            ...(columnTypes ? { columnTypes } : {}),
+          });
+
+          const rows = await knex('blobs').orderBy('id');
+          expect(rows.map((r) => r.label)).to.eql(['json-1', 'json-2']);
+          expect(Buffer.from(rows[0].data).equals(updates[0].data)).to.equal(
+            true
+          );
+          expect(Buffer.from(rows[1].data).equals(updates[1].data)).to.equal(
+            true
+          );
+        });
       });
     });
   });

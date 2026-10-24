@@ -930,6 +930,53 @@ describe('Updates', function () {
           ]);
         });
 
+        it("writes a Date, a bigint and NaN as .update() does in 'json' mode, leaving an undefined column", async function () {
+          if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+            return this.skip();
+          }
+          const savedTimezone = process.env.TZ;
+          process.env.TZ = 'Europe/Paris';
+          await knex.schema.dropTableIfExists('readings');
+          await knex.raw(
+            'create table readings (id int primary key, taken_at timestamp, total bigint, score float8, note text)'
+          );
+          await knex('readings').insert({ id: 1, note: 'kept' });
+
+          await knex.batchUpdate(
+            'readings',
+            [
+              {
+                id: 1,
+                taken_at: new Date('2026-07-01T08:00:00.000Z'),
+                total: 9007199254740993n,
+                score: NaN,
+                note: undefined,
+              },
+            ],
+            'id',
+            { mode: 'json' }
+          );
+
+          const rows = await knex('readings').select(
+            'id',
+            knex.raw("to_char(taken_at, 'YYYY-MM-DD HH24:MI:SS') as taken_at"),
+            knex.raw('total::text as total'),
+            knex.raw('score::text as score'),
+            'note'
+          );
+          process.env.TZ = savedTimezone;
+          await knex.schema.dropTableIfExists('readings');
+          expect(rows).to.eql([
+            {
+              id: 1,
+              taken_at: '2026-07-01 10:00:00',
+              total: '9007199254740993',
+              score: 'NaN',
+              note: 'kept',
+            },
+          ]);
+        });
+
         it("casts enum and text[] columns resolved with 'from_db' in 'union' mode", async function () {
           if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
             return this.skip();

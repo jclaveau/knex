@@ -319,6 +319,71 @@ describe('batchUpdate (db-less)', function () {
       expect(JSON.parse(bindings[0])).to.eql(threeRows);
     });
 
+    describe('postgres binds each value as node-pg binds it in .update()', function () {
+      const pgDefaults = require('pg').defaults;
+      let savedTimezone;
+
+      beforeEach(function () {
+        savedTimezone = process.env.TZ;
+        process.env.TZ = 'Europe/Paris';
+      });
+
+      afterEach(function () {
+        process.env.TZ = savedTimezone;
+        pgDefaults.parseInputDatesAsUTC = false;
+      });
+
+      it('binds a Date in local time with its offset', function () {
+        const { bindings } = clients['pg']('posts')
+          .batchUpdate(
+            [{ id: 1, published: new Date('2026-07-01T08:00:00.000Z') }],
+            ['id'],
+            ['published'],
+            undefined,
+            'json'
+          )
+          .toSQL();
+        expect(bindings).to.eql([
+          '[{"id":1,"published":"2026-07-01T10:00:00.000+02:00"}]',
+        ]);
+      });
+
+      it('binds a Date in UTC under parseInputDatesAsUTC', function () {
+        pgDefaults.parseInputDatesAsUTC = true;
+        const { bindings } = clients['pg']('posts')
+          .batchUpdate(
+            [{ id: 1, published: new Date('2026-07-01T08:00:00.000Z') }],
+            ['id'],
+            ['published'],
+            undefined,
+            'json'
+          )
+          .toSQL();
+        expect(bindings).to.eql([
+          '[{"id":1,"published":"2026-07-01T08:00:00.000+00:00"}]',
+        ]);
+      });
+
+      it('binds a bigint and a non-finite number as text', function () {
+        const { bindings } = clients['pg']('posts')
+          .batchUpdate(
+            [
+              { id: 1, views: 9007199254740993n, score: NaN },
+              { id: 2, views: 3n, score: Infinity },
+            ],
+            ['id'],
+            ['views', 'score'],
+            undefined,
+            'json'
+          )
+          .toSQL();
+        expect(bindings).to.eql([
+          '[{"id":1,"views":"9007199254740993","score":"NaN"},' +
+            '{"id":2,"views":"3","score":"Infinity"}]',
+        ]);
+      });
+    });
+
     it('cockroachdb reuses the postgres jsonb_populate_recordset form', function () {
       const { sql } = clients['cockroachdb']('users')
         .batchUpdate(rows, ['id'], ['name', 'age'], undefined, 'json')
@@ -492,6 +557,46 @@ describe('batchUpdate (db-less)', function () {
       expect(() =>
         prepareBatch([{ id: 1, name: 'a' }, { id: 2 }], ['id'], 'last')
       ).to.throw(/every row must have the key column/);
+    });
+
+    it('leaves out a column undefined in every row, as .update() does', function () {
+      expect(
+        prepareBatch(
+          [
+            { id: 1, name: 'a', age: undefined },
+            { id: 2, name: 'b', age: undefined },
+          ],
+          ['id'],
+          'last'
+        ).columns
+      ).to.eql(['name']);
+    });
+
+    it('rejects a column undefined in some rows only', function () {
+      expect(() =>
+        prepareBatch(
+          [
+            { id: 1, name: 'a', age: 10 },
+            { id: 2, name: 'b', age: undefined },
+          ],
+          ['id'],
+          'last'
+        )
+      )
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          'Invalid batch: age is undefined in some rows only; one SET clause writes it in every row, so set it to null or leave it out of every row'
+        );
+    });
+
+    it('rejects rows whose every non-key column is undefined', function () {
+      expect(() => prepareBatch([{ id: 1, name: undefined }], ['id'], 'last'))
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          'Invalid batch: rows have no non-key columns to update'
+        );
     });
 
     it('rejects rows with no non-key columns', function () {

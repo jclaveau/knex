@@ -930,6 +930,38 @@ describe('Updates', function () {
           ]);
         });
 
+        it("casts enum and text[] columns resolved with 'from_db' in 'union' mode", async function () {
+          if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+            return this.skip();
+          }
+          await knex.schema.dropTableIfExists('moods');
+          await knex.raw('drop type if exists mood_level');
+          await knex.raw("create type mood_level as enum ('low', 'high')");
+          await knex.raw(
+            'create table moods (id integer primary key, level mood_level, tags text[])'
+          );
+          await knex('moods').insert([
+            { id: 1, level: 'low', tags: ['old'] },
+            { id: 2, level: 'low', tags: ['decoy'] },
+          ]);
+
+          await knex.batchUpdate(
+            'moods',
+            [{ id: 1, level: 'high', tags: ['x', 'y'] }],
+            'id',
+            { mode: 'union', columnTypes: 'from_db' }
+          );
+
+          const rows = await knex('moods').orderBy('id');
+          await knex.schema.dropTableIfExists('moods');
+          await knex.raw('drop type if exists mood_level');
+          // Number() coerces CockroachDB's int-as-string columns.
+          expect(rows.map((r) => [Number(r.id), r.level, r.tags])).to.eql([
+            [1, 'high', ['x', 'y']],
+            [2, 'low', ['decoy']],
+          ]);
+        });
+
         it('returns the requested columns on postgres-family dialects', async function () {
           if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
             return this.skip();

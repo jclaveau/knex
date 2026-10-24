@@ -2,7 +2,10 @@
 
 const { expect } = require('chai');
 const knexLib = require('../../knex');
-const { prepareBatch } = require('../../lib/execution/batch-update');
+const {
+  prepareBatch,
+  resolveColumnTypesFromDb,
+} = require('../../lib/execution/batch-update');
 
 // Per-dialect SQL generation for batchUpdate, asserted via toSQL() without a
 // live database. Behavioural (real DML) coverage lives in the integration suite.
@@ -596,12 +599,57 @@ describe('batchUpdate (db-less)', function () {
     });
 
     it('interpolates parameterized and array type names into the casts', function () {
-      for (const type of ['text[]', 'varchar(255)', 'numeric(10, 2)']) {
+      for (const type of [
+        'text[]',
+        'varchar(255)',
+        'numeric(10, 2)',
+        'timestamp(3) with time zone',
+        '"public"."mood"[]',
+      ]) {
         const { sql } = clients['pg']('users')
           .batchUpdate(rows, ['id'], ['name', 'age'], { name: type })
           .toSQL();
         expect(sql).to.contain(`?::${type} as "name"`);
       }
+    });
+
+    it("throws when 'from_db' reads a type that is not a valid type name", async function () {
+      const dialectClient = {
+        batchUpdateColumnTypesFromDb: async () => ({
+          id: 'integer',
+          mood: 'USER-DEFINED',
+        }),
+      };
+      let error;
+      try {
+        await resolveColumnTypesFromDb(dialectClient, null, 'users', [
+          'id',
+          'mood',
+        ]);
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error.message).to.equal(
+        `columnTypes 'from_db': column mood has type "USER-DEFINED", which is not a valid type name; pass an explicit columnTypes entry for it`
+      );
+    });
+
+    it("throws when 'from_db' finds no type for a column", async function () {
+      const dialectClient = {
+        batchUpdateColumnTypesFromDb: async () => ({ id: 'integer' }),
+      };
+      let error;
+      try {
+        await resolveColumnTypesFromDb(dialectClient, null, 'users', [
+          'id',
+          'mood',
+        ]);
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error.message).to.equal(
+        `columnTypes 'from_db': users has no column mood`
+      );
     });
 
     it("accepts the 'from_data' and 'from_db' columnTypes strategies", function () {

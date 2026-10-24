@@ -2,7 +2,10 @@
 
 const { expect } = require('chai');
 const knexLib = require('../../knex');
-const { prepareBatch } = require('../../lib/execution/batch-update');
+const {
+  prepareBatch,
+  resolveColumnTypesFromDb,
+} = require('../../lib/execution/batch-update');
 
 // Per-dialect SQL generation for batchUpdate, asserted via toSQL() without a
 // live database. Behavioural (real DML) coverage lives in the integration suite.
@@ -297,7 +300,7 @@ describe('batchUpdate (db-less)', function () {
   });
 
   describe("mode: 'json'", function () {
-    it('postgres expands one jsonb param via jsonb_to_recordset with typed columns', function () {
+    it('postgres expands one jsonb param via jsonb_populate_recordset over the table row type', function () {
       const threeRows = [
         { id: 1, name: 'a', age: 10 },
         { id: 2, name: 'b', age: 20 },
@@ -308,8 +311,7 @@ describe('batchUpdate (db-less)', function () {
         .toSQL();
       expect(sql).to.equal(
         'update "users" set "name" = "v"."name", "age" = "v"."age" ' +
-          'from jsonb_to_recordset(?) as "v"' +
-          '("id" numeric, "name" text, "age" numeric) ' +
+          'from jsonb_populate_recordset(null::"users", ?) as "v" ' +
           'where "users"."id" = "v"."id"'
       );
       // one parameter for the WHOLE chunk regardless of row count
@@ -317,17 +319,34 @@ describe('batchUpdate (db-less)', function () {
       expect(JSON.parse(bindings[0])).to.eql(threeRows);
     });
 
-    it('honors columnTypes in the json column-definition list (postgres)', function () {
-      const { sql } = clients['pg']('users')
+    it('cockroachdb reuses the postgres jsonb_populate_recordset form', function () {
+      const { sql } = clients['cockroachdb']('users')
+        .batchUpdate(rows, ['id'], ['name', 'age'], undefined, 'json')
+        .toSQL();
+      expect(sql).to.equal(
+        'update "users" set "name" = "v"."name", "age" = "v"."age" ' +
+          'from jsonb_populate_recordset(null::"users", ?) as "v" ' +
+          'where "users"."id" = "v"."id"'
+      );
+    });
+
+    it('takes the row type of a schema-qualified table and qualifies RETURNING (postgres)', function () {
+      const { sql } = clients['pg']('public.articles')
         .batchUpdate(
-          [{ id: 1, tags: ['a'] }],
+          [{ id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', status: 'draft' }],
           ['id'],
-          ['tags'],
-          { tags: 'text[]' },
+          ['status'],
+          undefined,
           'json'
         )
+        .returning(['id'])
         .toSQL();
-      expect(sql).to.contain('"tags" text[]');
+      expect(sql).to.equal(
+        'update "public"."articles" set "status" = "v"."status" ' +
+          'from jsonb_populate_recordset(null::"public"."articles", ?) as "v" ' +
+          'where "public"."articles"."id" = "v"."id" ' +
+          'returning "public"."articles"."id"'
+      );
     });
 
     it('sqlite expands json_each into an UPDATE ... FROM source', function () {
@@ -493,6 +512,47 @@ describe('batchUpdate (db-less)', function () {
       );
     });
 
+    it("rejects a columnTypes map in 'json' mode on the postgres family", function () {
+      for (const dialect of ['pg', 'cockroachdb']) {
+        expect(() =>
+          clients[dialect].batchUpdate('users', rows, 'id', {
+            mode: 'json',
+            columnTypes: { name: 'text' },
+          })
+        )
+          .to.throw(TypeError)
+          .with.property(
+            'message',
+            "columnTypes has no effect in 'json' mode on postgres: the column types come from the table row type"
+          );
+      }
+    });
+
+    it("rejects columnTypes 'from_db' in 'json' mode on postgres before any query", function () {
+      expect(() =>
+        clients['pg'].batchUpdate('users', rows, 'id', {
+          mode: 'json',
+          columnTypes: 'from_db',
+        })
+      )
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          "columnTypes has no effect in 'json' mode on postgres: the column types come from the table row type"
+        );
+    });
+
+    it("accepts columnTypes 'from_data' in 'json' mode on postgres", function () {
+      expect(() =>
+        clients['pg']
+          .batchUpdate('users', rows, 'id', {
+            mode: 'json',
+            columnTypes: 'from_data',
+          })
+          .catch(() => {})
+      ).to.not.throw();
+    });
+
     it("rejects columnTypes in 'case' mode (nothing to cast)", function () {
       expect(() =>
         clients['pg'].batchUpdate('users', rows, 'id', {
@@ -539,12 +599,57 @@ describe('batchUpdate (db-less)', function () {
     });
 
     it('interpolates parameterized and array type names into the casts', function () {
-      for (const type of ['text[]', 'varchar(255)', 'numeric(10, 2)']) {
+      for (const type of [
+        'text[]',
+        'varchar(255)',
+        'numeric(10, 2)',
+        'timestamp(3) with time zone',
+        '"public"."mood"[]',
+      ]) {
         const { sql } = clients['pg']('users')
           .batchUpdate(rows, ['id'], ['name', 'age'], { name: type })
           .toSQL();
         expect(sql).to.contain(`?::${type} as "name"`);
       }
+    });
+
+    it("throws when 'from_db' reads a type that is not a valid type name", async function () {
+      const dialectClient = {
+        batchUpdateColumnTypesFromDb: async () => ({
+          id: 'integer',
+          mood: 'USER-DEFINED',
+        }),
+      };
+      let error;
+      try {
+        await resolveColumnTypesFromDb(dialectClient, null, 'users', [
+          'id',
+          'mood',
+        ]);
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error.message).to.equal(
+        `columnTypes 'from_db': column mood has type "USER-DEFINED", which is not a valid type name; pass an explicit columnTypes entry for it`
+      );
+    });
+
+    it("throws when 'from_db' finds no type for a column", async function () {
+      const dialectClient = {
+        batchUpdateColumnTypesFromDb: async () => ({ id: 'integer' }),
+      };
+      let error;
+      try {
+        await resolveColumnTypesFromDb(dialectClient, null, 'users', [
+          'id',
+          'mood',
+        ]);
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error.message).to.equal(
+        `columnTypes 'from_db': users has no column mood`
+      );
     });
 
     it("accepts the 'from_data' and 'from_db' columnTypes strategies", function () {

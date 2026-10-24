@@ -805,8 +805,9 @@ describe('Updates', function () {
         });
 
         it("updates each row to its own values with mode: 'json'", async function () {
-          // Postgres/CockroachDB (jsonb_to_recordset) infer types and SQLite is
-          // typeless; the JSON_TABLE/OPENJSON dialects need an explicit map.
+          // Postgres/CockroachDB (jsonb_populate_recordset) take the table row
+          // type and SQLite is typeless; the JSON_TABLE/OPENJSON dialects need
+          // an explicit map.
           const options = { mode: 'json' };
           if (isMysql(knex)) {
             options.columnTypes = {
@@ -848,8 +849,9 @@ describe('Updates', function () {
         });
 
         it("resolves columnTypes from the schema with 'from_db'", async function () {
-          // from_db reads types via columnInfo; exercised on the json path,
-          // which consumes columnTypes on postgres/sqlite.
+          // from_db reads types via columnInfo; postgres consumes them as the
+          // union casts (its json mode takes the row type instead), sqlite's
+          // json mode accepts and ignores them.
           if (!(isPostgreSQL(knex) || isSQLite(knex))) {
             return this.skip();
           }
@@ -860,7 +862,7 @@ describe('Updates', function () {
               { id: 2, name: 'fromdb2', age: 22 },
             ],
             'id',
-            { mode: 'json', columnTypes: 'from_db' }
+            { mode: isSQLite(knex) ? 'json' : 'union', columnTypes: 'from_db' }
           );
 
           const rows = await knex('members').orderBy('id');
@@ -871,6 +873,93 @@ describe('Updates', function () {
               [3, 'decoy', 99],
             ]
           );
+        });
+
+        it("types uuid, enum and text[] columns from the table row type in 'json' mode", async function () {
+          if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+            return this.skip();
+          }
+          await knex.schema.dropTableIfExists('articles');
+          await knex.raw('drop type if exists article_status');
+          await knex.raw(
+            "create type article_status as enum ('draft', 'live')"
+          );
+          await knex.raw(
+            'create table articles (id uuid primary key, status article_status, tags text[])'
+          );
+          await knex('articles').insert([
+            {
+              id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+              status: 'live',
+              tags: ['old'],
+            },
+            {
+              id: 'b1ffcd00-0d1c-4ef8-bb6d-6bb9bd380a22',
+              status: 'live',
+              tags: ['decoy'],
+            },
+          ]);
+
+          await knex.batchUpdate(
+            'articles',
+            [
+              {
+                id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+                status: 'draft',
+                tags: ['x', 'y'],
+              },
+            ],
+            'id',
+            { mode: 'json' }
+          );
+
+          const rows = await knex('articles').orderBy('id');
+          await knex.schema.dropTableIfExists('articles');
+          await knex.raw('drop type if exists article_status');
+          expect(rows).to.eql([
+            {
+              id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+              status: 'draft',
+              tags: ['x', 'y'],
+            },
+            {
+              id: 'b1ffcd00-0d1c-4ef8-bb6d-6bb9bd380a22',
+              status: 'live',
+              tags: ['decoy'],
+            },
+          ]);
+        });
+
+        it("casts enum and text[] columns resolved with 'from_db' in 'union' mode", async function () {
+          if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+            return this.skip();
+          }
+          await knex.schema.dropTableIfExists('moods');
+          await knex.raw('drop type if exists mood_level');
+          await knex.raw("create type mood_level as enum ('low', 'high')");
+          await knex.raw(
+            'create table moods (id integer primary key, level mood_level, tags text[])'
+          );
+          await knex('moods').insert([
+            { id: 1, level: 'low', tags: ['old'] },
+            { id: 2, level: 'low', tags: ['decoy'] },
+          ]);
+
+          await knex.batchUpdate(
+            'moods',
+            [{ id: 1, level: 'high', tags: ['x', 'y'] }],
+            'id',
+            { mode: 'union', columnTypes: 'from_db' }
+          );
+
+          const rows = await knex('moods').orderBy('id');
+          await knex.schema.dropTableIfExists('moods');
+          await knex.raw('drop type if exists mood_level');
+          // Number() coerces CockroachDB's int-as-string columns.
+          expect(rows.map((r) => [Number(r.id), r.level, r.tags])).to.eql([
+            [1, 'high', ['x', 'y']],
+            [2, 'low', ['decoy']],
+          ]);
         });
 
         it('returns the requested columns on postgres-family dialects', async function () {
@@ -1137,7 +1226,7 @@ describe('Updates', function () {
 
           it('json updates every row (CLOB-split payload on oracle)', async function () {
             // JSON_TABLE / OPENJSON dialects need an explicit type map; pg
-            // infers and SQLite is typeless.
+            // takes the table row type and SQLite is typeless.
             const columnTypes = isMysql(knex)
               ? { id: 'int', name: 'char(255)', age: 'int' }
               : isMssql(knex)

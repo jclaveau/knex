@@ -429,7 +429,8 @@ interface Knex<TRecord extends {} = any, TResult = any[]>
       | {
           // 'union' (default) and 'json' can take per-column DB cast types:
           // an explicit map, 'from_data' (infer from values, the default), or
-          // 'from_db' (read the schema via columnInfo).
+          // 'from_db' (read the schema; the catalog on Postgres). Postgres 'json' types
+          // columns from the table row type and accepts only 'from_data'.
           mode?: 'union' | 'json';
           chunkSize?: number;
           onDuplicateKey?: 'last' | 'throw';

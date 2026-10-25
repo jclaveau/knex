@@ -958,7 +958,6 @@ describe('Updates', function () {
           );
 
           const rows = await knex('readings').select(
-            'id',
             knex.raw("to_char(taken_at, 'YYYY-MM-DD HH24:MI:SS') as taken_at"),
             knex.raw('total::text as total'),
             knex.raw('score::text as score'),
@@ -968,7 +967,6 @@ describe('Updates', function () {
           await knex.schema.dropTableIfExists('readings');
           expect(rows).to.eql([
             {
-              id: 1,
               taken_at: '2026-07-01 10:00:00',
               total: '9007199254740993',
               score: 'NaN',

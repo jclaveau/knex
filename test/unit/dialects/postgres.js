@@ -327,4 +327,34 @@ describe('Postgres Unit Tests', function () {
       await knexInstance.destroy();
     }
   });
+
+  describe('positionBindings', function () {
+    const client = new pgDialect({ client: 'pg' });
+
+    it('numbers each placeholder and unescapes an escaped one', function () {
+      expect(client.positionBindings('a = ? and b ? c and d \\? e')).to.equal(
+        'a = $1 and b $2 c and d ? e'
+      );
+    });
+
+    it('counts the escapes before a placeholder by parity', function () {
+      expect(client.positionBindings('a \\\\? b \\\\\\? c')).to.equal(
+        'a $1 b ? c'
+      );
+    });
+
+    it('keeps backslashes that precede no placeholder', function () {
+      expect(client.positionBindings('x \\ y ? z \\')).to.equal(
+        'x \\ y $1 z \\'
+      );
+    });
+
+    it('stays linear on a long run of backslashes (CodeQL js/polynomial-redos)', function () {
+      this.timeout(1000);
+      const backslashes = '\\'.repeat(100000);
+      expect(client.positionBindings(`${backslashes} ?`)).to.equal(
+        `${backslashes} $1`
+      );
+    });
+  });
 });

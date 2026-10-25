@@ -942,29 +942,40 @@ describe('Updates', function () {
           );
           await knex('readings').insert({ id: 1, note: 'kept' });
 
-          await knex.batchUpdate(
-            'readings',
-            [
-              {
-                id: 1,
-                taken_at: new Date('2026-07-01T08:00:00.000Z'),
-                total: 9007199254740993n,
-                score: NaN,
-                note: undefined,
-              },
-            ],
-            'id',
-            { mode: 'json' }
-          );
+          let rows;
+          try {
+            await knex.batchUpdate(
+              'readings',
+              [
+                {
+                  id: 1,
+                  taken_at: new Date('2026-07-01T08:00:00.000Z'),
+                  total: 9007199254740993n,
+                  score: NaN,
+                  note: undefined,
+                },
+              ],
+              'id',
+              { mode: 'json' }
+            );
 
-          const rows = await knex('readings').select(
-            knex.raw("to_char(taken_at, 'YYYY-MM-DD HH24:MI:SS') as taken_at"),
-            knex.raw('total::text as total'),
-            knex.raw('score::text as score'),
-            'note'
-          );
-          process.env.TZ = savedTimezone;
-          await knex.schema.dropTableIfExists('readings');
+            rows = await knex('readings').select(
+              knex.raw(
+                "to_char(taken_at, 'YYYY-MM-DD HH24:MI:SS') as taken_at"
+              ),
+              knex.raw('total::text as total'),
+              knex.raw('score::text as score'),
+              'note'
+            );
+          } finally {
+            // Assigning undefined would store the string 'undefined', i.e. UTC.
+            if (savedTimezone === undefined) {
+              delete process.env.TZ;
+            } else {
+              process.env.TZ = savedTimezone;
+            }
+            await knex.schema.dropTableIfExists('readings');
+          }
           expect(rows).to.eql([
             {
               taken_at: '2026-07-01 10:00:00',
@@ -1105,14 +1116,14 @@ describe('Updates', function () {
         });
 
         it('rolls everything back when the caller transaction is rolled back', async function () {
-          await knex
-            .transaction(async (trx) => {
+          await expect(
+            knex.transaction(async (trx) => {
               await knex
                 .batchUpdate('members', [{ id: 1, name: 'doomed', age: 0 }])
                 .transacting(trx);
               throw new Error('force rollback');
             })
-            .catch(() => {});
+          ).to.be.rejectedWith(Error, /^force rollback$/);
 
           const row = await knex('members').where('id', 1).first();
           expect(row.name).to.equal('old1'); // rollback reverted the update

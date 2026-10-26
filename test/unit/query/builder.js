@@ -1531,6 +1531,10 @@ describe('QueryBuilder', () => {
         sql: 'select * from "users" where "id" = any(?)',
         bindings: [ids],
       },
+      cockroachdb: {
+        sql: 'select * from "users" where "id" = any(?)',
+        bindings: [ids],
+      },
       'pg-redshift': {
         sql: `select * from "users" where "id" in (${'?, '.repeat(65535)}?)`,
         bindings: ids,
@@ -1572,6 +1576,37 @@ describe('QueryBuilder', () => {
         },
       }
     );
+  });
+
+  it('where in past the postgres bind parameter limit holding an object keeps its list', () => {
+    const ids = Array.from({ length: 65536 }, (_, index) => index + 1);
+    testsql(
+      qb()
+        .select('*')
+        .from('users')
+        .whereIn('id', [...ids, { a: 1 }]),
+      {
+        pg: {
+          sql: `select * from "users" where "id" in (${'?, '.repeat(65536)}?)`,
+          bindings: [...ids, '{"a":1}'],
+        },
+      }
+    );
+  });
+
+  it('where in past the postgres bind parameter limit binds null, dates and buffers in the array', () => {
+    const values = [
+      null,
+      new Date(0),
+      Buffer.from('a1b2', 'hex'),
+      ...Array.from({ length: 65533 }, (_, index) => index + 1),
+    ];
+    testsql(qb().select('*').from('users').whereIn('id', values), {
+      pg: {
+        sql: 'select * from "users" where "id" = any(?)',
+        bindings: [values],
+      },
+    });
   });
 
   it('where ins with Buffer values', () => {

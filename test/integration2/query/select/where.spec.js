@@ -316,7 +316,9 @@ describe('Where', function () {
         if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
           return this.skip();
         }
-        const accountIds = await knex('accounts').orderBy('id').pluck('id');
+        const [firstAccountId, ...accountIds] = await knex('accounts')
+          .orderBy('id')
+          .pluck('id');
         // CockroachDB ids come from unique_rowid(), so no positive id is known
         // not to match.
         const missingIds = Array.from({ length: 70000 }, (_, index) => -index);
@@ -329,7 +331,7 @@ describe('Where', function () {
         const otherAccounts = await knex('accounts')
           .whereNotIn('id', ids)
           .pluck('id');
-        expect(otherAccounts).to.deep.equal([]);
+        expect(otherAccounts).to.deep.equal([firstAccountId]);
       });
 
       it('handles "where in" raw cases', async () => {

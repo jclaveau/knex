@@ -10821,6 +10821,26 @@ describe('QueryBuilder', () => {
     );
   });
 
+  it('escapes strings, dates, buffers and bigints in a postgresql array', () => {
+    testquery(
+      qb()
+        .select('*')
+        .from('sometable')
+        .where('array_field', '&&', [
+          'line\nbreak',
+          "it's",
+          'back\\slash',
+          'say "hi"',
+          new Date(2016, 0, 5, 10, 19, 30, 599),
+          Buffer.from([1, 2]),
+          10n,
+        ]),
+      {
+        pg: String.raw`select * from "sometable" where "array_field" && E'{"line${'\n'}break","it''s","back\\\\slash","say \\"hi\\"","2016-01-05 10:19:30.599","\\\\x0102",10}'`,
+      }
+    );
+  });
+
   it('#2003, properly escapes objects with toPostgres specialization', () => {
     function TestObject() {}
     TestObject.prototype.toPostgres = () => 'foobar';

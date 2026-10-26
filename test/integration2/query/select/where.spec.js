@@ -6,6 +6,7 @@ require('assert');
 require('../../../../lib/execution/runner');
 
 const {
+  isCockroachDB,
   isMysql,
   isPostgreSQL,
   isMssql,
@@ -309,6 +310,63 @@ describe('Where', function () {
 
       it('handles "where in" cases', async () => {
         await knex('accounts').whereIn('id', [1, 2, 3]).select();
+      });
+
+      it('handles "where in" past the postgres bind parameter limit', async function () {
+        if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+          return this.skip();
+        }
+        const [firstAccountId, ...accountIds] = await knex('accounts')
+          .orderBy('id')
+          .pluck('id');
+        // CockroachDB ids come from unique_rowid(), so no positive id is known
+        // not to match.
+        const missingIds = Array.from({ length: 70000 }, (_, index) => -index);
+        const ids = [...missingIds, ...accountIds];
+        const foundAccounts = await knex('accounts')
+          .whereIn('id', ids)
+          .orderBy('id')
+          .pluck('id');
+        expect(foundAccounts).to.deep.equal(accountIds);
+        const otherAccounts = await knex('accounts')
+          .whereNotIn('id', ids)
+          .pluck('id');
+        expect(otherAccounts).to.deep.equal([firstAccountId]);
+      });
+
+      it('handles "having in" and "on in" past the postgres bind parameter limit', async function () {
+        if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+          return this.skip();
+        }
+        const [firstAccountId, ...accountIds] = await knex('accounts')
+          .orderBy('id')
+          .pluck('id');
+        const missingIds = Array.from({ length: 70000 }, (_, index) => -index);
+        const ids = [...missingIds, ...accountIds];
+        const havingAccounts = await knex('accounts')
+          .groupBy('id')
+          .havingIn('id', ids)
+          .orderBy('id')
+          .pluck('id');
+        expect(havingAccounts).to.deep.equal(accountIds);
+        const havingOtherAccounts = await knex('accounts')
+          .groupBy('id')
+          .havingNotIn('id', ids)
+          .pluck('id');
+        expect(havingOtherAccounts).to.deep.equal([firstAccountId]);
+        const joinedAccounts = await knex('accounts')
+          .join('accounts as other', (join) => {
+            join.on('accounts.id', '=', 'other.id').onIn('other.id', ids);
+          })
+          .orderBy('accounts.id')
+          .pluck('accounts.id');
+        expect(joinedAccounts).to.deep.equal(accountIds);
+        const joinedOtherAccounts = await knex('accounts')
+          .join('accounts as other', (join) => {
+            join.on('accounts.id', '=', 'other.id').onNotIn('other.id', ids);
+          })
+          .pluck('accounts.id');
+        expect(joinedOtherAccounts).to.deep.equal([firstAccountId]);
       });
 
       it('handles "where in" raw cases', async () => {

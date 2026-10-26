@@ -6,6 +6,7 @@ require('assert');
 require('../../../../lib/execution/runner');
 
 const {
+  isCockroachDB,
   isMysql,
   isPostgreSQL,
   isMssql,
@@ -309,6 +310,26 @@ describe('Where', function () {
 
       it('handles "where in" cases', async () => {
         await knex('accounts').whereIn('id', [1, 2, 3]).select();
+      });
+
+      it('handles "where in" past the postgres bind parameter limit', async function () {
+        if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+          return this.skip();
+        }
+        const accountIds = await knex('accounts').orderBy('id').pluck('id');
+        // CockroachDB ids come from unique_rowid(), so no positive id is known
+        // not to match.
+        const missingIds = Array.from({ length: 70000 }, (_, index) => -index);
+        const ids = [...missingIds, ...accountIds];
+        const foundAccounts = await knex('accounts')
+          .whereIn('id', ids)
+          .orderBy('id')
+          .pluck('id');
+        expect(foundAccounts).to.deep.equal(accountIds);
+        const otherAccounts = await knex('accounts')
+          .whereNotIn('id', ids)
+          .pluck('id');
+        expect(otherAccounts).to.deep.equal([]);
       });
 
       it('handles "where in" raw cases', async () => {

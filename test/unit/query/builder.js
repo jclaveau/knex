@@ -1524,6 +1524,56 @@ describe('QueryBuilder', () => {
     });
   });
 
+  it('where in past the postgres bind parameter limit binds one array', () => {
+    const ids = Array.from({ length: 65536 }, (_, index) => index + 1);
+    testsql(qb().select('*').from('users').whereIn('id', ids), {
+      pg: {
+        sql: 'select * from "users" where "id" = any(?)',
+        bindings: [ids],
+      },
+      'pg-redshift': {
+        sql: `select * from "users" where "id" in (${'?, '.repeat(65535)}?)`,
+        bindings: ids,
+      },
+    });
+  });
+
+  it('where not in past the postgres bind parameter limit binds one array', () => {
+    const ids = Array.from({ length: 65536 }, (_, index) => index + 1);
+    testsql(qb().select('*').from('users').whereNotIn('id', ids), {
+      pg: {
+        sql: 'select * from "users" where "id" <> all(?)',
+        bindings: [ids],
+      },
+    });
+  });
+
+  it('where in at the postgres bind parameter limit keeps its list', () => {
+    const ids = Array.from({ length: 65535 }, (_, index) => index + 1);
+    testsql(qb().select('*').from('users').whereIn('id', ids), {
+      pg: {
+        sql: `select * from "users" where "id" in (${'?, '.repeat(65534)}?)`,
+        bindings: ids,
+      },
+    });
+  });
+
+  it('where in past the postgres bind parameter limit holding a raw keeps its list', () => {
+    const ids = Array.from({ length: 65536 }, (_, index) => index + 1);
+    testsql(
+      qb()
+        .select('*')
+        .from('users')
+        .whereIn('id', [...ids, raw('0')]),
+      {
+        pg: {
+          sql: `select * from "users" where "id" in (${'?, '.repeat(65536)}0)`,
+          bindings: ids,
+        },
+      }
+    );
+  });
+
   it('where ins with Buffer values', () => {
     const buf1 = Buffer.from('a1b2c3d4', 'hex');
     const buf2 = Buffer.from('e5f6a7b8', 'hex');

@@ -1609,6 +1609,65 @@ describe('QueryBuilder', () => {
     });
   });
 
+  it('having in past the postgres bind parameter limit binds one array', () => {
+    const ids = Array.from({ length: 65536 }, (_, index) => index + 1);
+    testsql(
+      qb()
+        .select('id')
+        .from('users')
+        .groupBy('id')
+        .havingIn('id', ids)
+        .orHavingNotIn('id', ids),
+      {
+        pg: {
+          sql: 'select "id" from "users" group by "id" having "id" = any(?) or "id" <> all(?)',
+          bindings: [ids, ids],
+        },
+        cockroachdb: {
+          sql: 'select "id" from "users" group by "id" having "id" = any(?) or "id" <> all(?)',
+          bindings: [ids, ids],
+        },
+        'pg-redshift': {
+          sql: `select "id" from "users" group by "id" having "id" in (${'?, '.repeat(
+            65535
+          )}?) or "id" not in (${'?, '.repeat(65535)}?)`,
+          bindings: [...ids, ...ids],
+        },
+      }
+    );
+  });
+
+  it('on in past the postgres bind parameter limit binds one array', () => {
+    const ids = Array.from({ length: 65536 }, (_, index) => index + 1);
+    testsql(
+      qb()
+        .select('*')
+        .from('users')
+        .join('contacts', (join) => {
+          join
+            .on('users.id', '=', 'contacts.id')
+            .onIn('contacts.id', ids)
+            .orOnNotIn('users.id', ids);
+        }),
+      {
+        pg: {
+          sql: 'select * from "users" inner join "contacts" on "users"."id" = "contacts"."id" and "contacts"."id" = any(?) or "users"."id" <> all(?)',
+          bindings: [ids, ids],
+        },
+        cockroachdb: {
+          sql: 'select * from "users" inner join "contacts" on "users"."id" = "contacts"."id" and "contacts"."id" = any(?) or "users"."id" <> all(?)',
+          bindings: [ids, ids],
+        },
+        'pg-redshift': {
+          sql: `select * from "users" inner join "contacts" on "users"."id" = "contacts"."id" and "contacts"."id" in (${'?, '.repeat(
+            65535
+          )}?) or "users"."id" not in (${'?, '.repeat(65535)}?)`,
+          bindings: [...ids, ...ids],
+        },
+      }
+    );
+  });
+
   it('where ins with Buffer values', () => {
     const buf1 = Buffer.from('a1b2c3d4', 'hex');
     const buf2 = Buffer.from('e5f6a7b8', 'hex');

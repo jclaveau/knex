@@ -389,6 +389,24 @@ describe('batchUpdate (db-less)', function () {
             '{"id":2,"views":"3","score":"Infinity"}]',
         ]);
       });
+
+      it('binds a Date when the client driver is replaced', function () {
+        const knex = knexLib({ client: 'pg' });
+        knex.client.driver = { tracker: {} };
+        const { bindings } = knex('posts')
+          .batchUpdate(
+            [{ id: 1, published: new Date('2026-07-01T08:00:00.000Z') }],
+            ['id'],
+            ['published'],
+            undefined,
+            'json'
+          )
+          .toSQL();
+        knex.destroy();
+        expect(bindings).to.eql([
+          '[{"id":1,"published":"2026-07-01T10:00:00.000+02:00"}]',
+        ]);
+      });
     });
 
     it('postgres keys each JSON row by the wrapIdentifier column name', function () {

@@ -930,6 +930,62 @@ describe('Updates', function () {
           ]);
         });
 
+        it("writes a Date, a bigint and NaN as .update() does in 'json' mode, leaving an undefined column", async function () {
+          if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+            return this.skip();
+          }
+          const savedTimezone = process.env.TZ;
+          process.env.TZ = 'Europe/Paris';
+          await knex.schema.dropTableIfExists('readings');
+          await knex.raw(
+            'create table readings (id int primary key, taken_at timestamp, total bigint, score float8, note text)'
+          );
+          await knex('readings').insert({ id: 1, note: 'kept' });
+
+          let rows;
+          try {
+            await knex.batchUpdate(
+              'readings',
+              [
+                {
+                  id: 1,
+                  taken_at: new Date('2026-07-01T08:00:00.000Z'),
+                  total: 9007199254740993n,
+                  score: NaN,
+                  note: undefined,
+                },
+              ],
+              'id',
+              { mode: 'json' }
+            );
+
+            rows = await knex('readings').select(
+              knex.raw(
+                "to_char(taken_at, 'YYYY-MM-DD HH24:MI:SS') as taken_at"
+              ),
+              knex.raw('total::text as total'),
+              knex.raw('score::text as score'),
+              'note'
+            );
+          } finally {
+            // Assigning undefined would store the string 'undefined', i.e. UTC.
+            if (savedTimezone === undefined) {
+              delete process.env.TZ;
+            } else {
+              process.env.TZ = savedTimezone;
+            }
+            await knex.schema.dropTableIfExists('readings');
+          }
+          expect(rows).to.eql([
+            {
+              taken_at: '2026-07-01 10:00:00',
+              total: '9007199254740993',
+              score: 'NaN',
+              note: 'kept',
+            },
+          ]);
+        });
+
         it("casts enum and text[] columns resolved with 'from_db' in 'union' mode", async function () {
           if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
             return this.skip();
@@ -1060,14 +1116,14 @@ describe('Updates', function () {
         });
 
         it('rolls everything back when the caller transaction is rolled back', async function () {
-          await knex
-            .transaction(async (trx) => {
+          await expect(
+            knex.transaction(async (trx) => {
               await knex
                 .batchUpdate('members', [{ id: 1, name: 'doomed', age: 0 }])
                 .transacting(trx);
               throw new Error('force rollback');
             })
-            .catch(() => {});
+          ).to.be.rejectedWith(Error, /^force rollback$/);
 
           const row = await knex('members').where('id', 1).first();
           expect(row.name).to.equal('old1'); // rollback reverted the update

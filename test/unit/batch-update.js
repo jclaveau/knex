@@ -319,6 +319,102 @@ describe('batchUpdate (db-less)', function () {
       expect(JSON.parse(bindings[0])).to.eql(threeRows);
     });
 
+    describe('postgres binds each value as node-pg binds it in .update()', function () {
+      const pgDefaults = require('pg').defaults;
+      let savedTimezone;
+      let savedDatesAsUtc;
+
+      beforeEach(function () {
+        savedTimezone = process.env.TZ;
+        savedDatesAsUtc = pgDefaults.parseInputDatesAsUTC;
+        process.env.TZ = 'Europe/Paris';
+      });
+
+      afterEach(function () {
+        // Assigning undefined would store the string 'undefined', i.e. UTC.
+        if (savedTimezone === undefined) {
+          delete process.env.TZ;
+        } else {
+          process.env.TZ = savedTimezone;
+        }
+        pgDefaults.parseInputDatesAsUTC = savedDatesAsUtc;
+      });
+
+      it('binds a Date in local time with its offset', function () {
+        const { bindings } = clients['pg']('posts')
+          .batchUpdate(
+            [{ id: 1, published: new Date('2026-07-01T08:00:00.000Z') }],
+            ['id'],
+            ['published'],
+            undefined,
+            'json'
+          )
+          .toSQL();
+        expect(bindings).to.eql([
+          '[{"id":1,"published":"2026-07-01T10:00:00.000+02:00"}]',
+        ]);
+      });
+
+      it('binds a Date in UTC under parseInputDatesAsUTC', function () {
+        pgDefaults.parseInputDatesAsUTC = true;
+        const { bindings } = clients['pg']('posts')
+          .batchUpdate(
+            [{ id: 1, published: new Date('2026-07-01T08:00:00.000Z') }],
+            ['id'],
+            ['published'],
+            undefined,
+            'json'
+          )
+          .toSQL();
+        expect(bindings).to.eql([
+          '[{"id":1,"published":"2026-07-01T08:00:00.000+00:00"}]',
+        ]);
+      });
+
+      it('binds a bigint and a non-finite number as text', function () {
+        const { bindings } = clients['pg']('posts')
+          .batchUpdate(
+            [
+              { id: 1, views: 9007199254740993n, score: NaN },
+              { id: 2, views: 3n, score: Infinity },
+            ],
+            ['id'],
+            ['views', 'score'],
+            undefined,
+            'json'
+          )
+          .toSQL();
+        expect(bindings).to.eql([
+          '[{"id":1,"views":"9007199254740993","score":"NaN"},' +
+            '{"id":2,"views":"3","score":"Infinity"}]',
+        ]);
+      });
+    });
+
+    it('postgres keys each JSON row by the wrapIdentifier column name', function () {
+      const knex = knexLib({
+        client: 'pg',
+        wrapIdentifier: (value, origImpl) =>
+          origImpl(value.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)),
+      });
+      const { sql, bindings } = knex('users')
+        .batchUpdate(
+          [{ id: 1, firstName: 'new' }],
+          ['id'],
+          ['firstName'],
+          undefined,
+          'json'
+        )
+        .toSQL();
+      knex.destroy();
+      expect(sql).to.equal(
+        'update "users" set "first_name" = "v"."first_name" ' +
+          'from jsonb_populate_recordset(null::"users", ?) as "v" ' +
+          'where "users"."id" = "v"."id"'
+      );
+      expect(bindings).to.eql(['[{"id":1,"first_name":"new"}]']);
+    });
+
     it('cockroachdb reuses the postgres jsonb_populate_recordset form', function () {
       const { sql } = clients['cockroachdb']('users')
         .batchUpdate(rows, ['id'], ['name', 'age'], undefined, 'json')
@@ -494,10 +590,89 @@ describe('batchUpdate (db-less)', function () {
       ).to.throw(/every row must have the key column/);
     });
 
+    it('leaves out a column undefined in every row, as .update() does', function () {
+      expect(
+        prepareBatch(
+          [
+            { id: 1, name: 'a', age: undefined },
+            { id: 2, name: 'b', age: undefined },
+          ],
+          ['id'],
+          'last'
+        ).columns
+      ).to.eql(['name']);
+    });
+
+    it('rejects a column undefined in some rows only', function () {
+      expect(() =>
+        prepareBatch(
+          [
+            { id: 1, name: 'a', age: 10 },
+            { id: 2, name: 'b', age: undefined },
+          ],
+          ['id'],
+          'last'
+        )
+      )
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          'Invalid batch: age is undefined in some rows only; one SET clause writes it in every row, so set it to null or leave it out of every row'
+        );
+    });
+
+    it('rejects rows whose every non-key column is undefined', function () {
+      expect(() => prepareBatch([{ id: 1, name: undefined }], ['id'], 'last'))
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          'Invalid batch: rows have no non-key columns to update'
+        );
+    });
+
     it('rejects rows with no non-key columns', function () {
       expect(() => prepareBatch([{ id: 1 }], ['id'], 'last')).to.throw(
         /no non-key columns/
       );
+    });
+
+    it('collapses a duplicate composite key holding a bigint', function () {
+      expect(
+        prepareBatch(
+          [
+            { tenant: 1n, id: 2, name: 'a' },
+            { tenant: 1n, id: 2, name: 'b' },
+          ],
+          ['tenant', 'id'],
+          'last'
+        )
+      ).to.eql({ columns: ['name'], rows: [{ tenant: 1n, id: 2, name: 'b' }] });
+    });
+
+    it('names a duplicate composite key holding a bigint', function () {
+      expect(() =>
+        prepareBatch(
+          [
+            { tenant: 1n, id: 2, name: 'a' },
+            { tenant: 1n, id: 2, name: 'b' },
+          ],
+          ['tenant', 'id'],
+          'throw'
+        )
+      )
+        .to.throw(Error)
+        .with.property(
+          'message',
+          `Invalid batch: duplicate key ["1",2] (use onDuplicateKey: 'last' to keep the last row instead)`
+        );
+    });
+
+    it('rejects a NaN chunkSize', function () {
+      expect(() =>
+        clients['pg'].batchUpdate('users', rows, 'id', { chunkSize: NaN })
+      )
+        .to.throw(TypeError)
+        .with.property('message', 'Invalid chunkSize: NaN');
     });
 
     it('rejects a bad chunkSize', function () {

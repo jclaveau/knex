@@ -1181,6 +1181,17 @@ describe('batchUpdate (db-less)', function () {
       ).to.throw(/Invalid columnTypes\.name/);
     });
 
+    it('rejects a type name behind more than one schema', function () {
+      expect(() =>
+        clients['pg'].batchUpdate('users', rows, 'id', {
+          columnTypes: { name: 'db.other.mood' },
+        })
+      ).to.throw(
+        TypeError,
+        'Invalid columnTypes.name: "db.other.mood" is not a valid type name'
+      );
+    });
+
     it('interpolates parameterized and array type names into the casts', function () {
       for (const type of [
         'text[]',

@@ -986,6 +986,41 @@ describe('Updates', function () {
           ]);
         });
 
+        it('casts to an enum named behind its schema in columnTypes', async function () {
+          // A bare `schema.type` reaches the cast as written, so an enum outside
+          // the search_path needs no quoting.
+          if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+            return this.skip();
+          }
+          await knex.raw('drop schema if exists batch_moods cascade');
+          await knex.raw('create schema batch_moods');
+          await knex.raw(
+            "create type batch_moods.mood_level as enum ('low', 'high')"
+          );
+          await knex.raw(
+            'create table batch_moods.moods (id integer primary key, level batch_moods.mood_level)'
+          );
+          await knex('batch_moods.moods').insert([
+            { id: 1, level: 'low' },
+            { id: 2, level: 'low' },
+          ]);
+
+          await knex.batchUpdate(
+            'batch_moods.moods',
+            [{ id: 1, level: 'high' }],
+            'id',
+            { mode: 'union', columnTypes: { level: 'batch_moods.mood_level' } }
+          );
+
+          const rows = await knex('batch_moods.moods').orderBy('id');
+          await knex.raw('drop schema batch_moods cascade');
+          // Number() coerces CockroachDB's int-as-string columns.
+          expect(rows.map((r) => [Number(r.id), r.level])).to.eql([
+            [1, 'high'],
+            [2, 'low'],
+          ]);
+        });
+
         it("casts enum and text[] columns resolved with 'from_db' in 'union' mode", async function () {
           if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
             return this.skip();

@@ -376,6 +376,26 @@ describe('batchUpdate (db-less)', function () {
     }
   });
 
+  it("throws for .returning() in 'json' mode on sqlite3", function () {
+    expect(() =>
+      clients['sqlite3']('users')
+        .batchUpdate(
+          [{ id: 1, name: 'a' }],
+          ['id'],
+          ['name'],
+          undefined,
+          'json'
+        )
+        .returning(['id'])
+        .toSQL()
+    )
+      .to.throw(Error)
+      .with.property(
+        'message',
+        '.batchUpdate().returning() is not supported for sqlite3'
+      );
+  });
+
   describe("mode: 'case'", function () {
     it('emits one CASE per column keyed on the row, IN-list WHERE', function () {
       const { sql, bindings } = clients['pg']('users')
@@ -431,13 +451,18 @@ describe('batchUpdate (db-less)', function () {
       expect(sql).to.contain('select @@rowcount');
     });
 
-    it('rejects .returning() (union only)', function () {
+    it('rejects .returning()', function () {
       expect(() =>
         clients['pg']('users')
           .batchUpdate(rows, ['id'], ['name'], undefined, 'case')
           .returning(['id'])
           .toSQL()
-      ).to.throw(/only supported with mode 'union'/);
+      )
+        .to.throw(Error)
+        .with.property(
+          'message',
+          ".batchUpdate().returning() is not supported with mode 'case'"
+        );
     });
   });
 
@@ -1186,10 +1211,12 @@ describe('batchUpdate (db-less)', function () {
         clients['pg'].batchUpdate('users', rows, 'id', {
           columnTypes: { name: 'db.other.mood' },
         })
-      ).to.throw(
-        TypeError,
-        'Invalid columnTypes.name: "db.other.mood" is not a valid type name'
-      );
+      )
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          'Invalid columnTypes.name: "db.other.mood" is not a valid type name'
+        );
     });
 
     it('interpolates parameterized and array type names into the casts', function () {

@@ -1747,12 +1747,22 @@ describe('Updates', function () {
             }));
           await knex.batchInsert(
             'case_chunk_timing',
-            buildRows('seed', 2000),
+            buildRows('seed', 10000),
             500
           );
-          // The planner's statistics drive the cost this pins: with them it
-          // plans one index scan per OR term, as on any analyzed table.
+          // The cost this pins is planning a BitmapOr of one index scan per OR
+          // term, the plan PostgreSQL picks once the table's statistics show it
+          // far larger than the chunk. On a table only twice the chunk's size it
+          // flips to a seq scan whenever autovacuum re-analyzes it.
           await knex.raw('analyze case_chunk_timing');
+          // Opens the connection and warms the catalog caches, which would
+          // otherwise land on whichever cap runs first.
+          await knex.batchUpdate(
+            'case_chunk_timing',
+            buildRows('warm-up', 2000),
+            ['k0', 'k1'],
+            { mode: 'case' }
+          );
           expect(knex.client.batchUpdateRowLimit('case', 2, 1)).to.equal(50);
           const medianWallMs = async (cap) => {
             knex.client.batchUpdateRowLimit = () => cap;

@@ -310,7 +310,8 @@ async function benchCaseChunkSize(knex) {
     return;
   }
   console.log(
-    `\n## ${knex.client.config.client} case chunk size (${sweep.rows} rows, median ${sweep.metric} ms of ${sweep.runs} runs)\n`
+    `\n## ${knex.client.config.client} case chunk size ` +
+      `(${sweep.rows} rows, median ${sweep.metric} ms of ${sweep.runs} runs)\n`
   );
   console.log(`| keys | cols | ${sweep.caps.join(' | ')} | shipped cap |`);
   console.log(`|---:|---:|${sweep.caps.map(() => '---:|').join('')}---:|`);

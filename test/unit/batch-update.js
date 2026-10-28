@@ -44,7 +44,7 @@ describe('batchUpdate (db-less)', function () {
       .toSQL();
     expect(sql).to.equal(
       'update "users" set "name" = "v"."name", "age" = "v"."age" from ' +
-        '(select ?::numeric as "id", ?::text as "name", ?::numeric as "age" ' +
+        '(select ?::bigint as "id", ?::text as "name", ?::bigint as "age" ' +
         'union all select ?, ?, ?) as "v" where "users"."id" = "v"."id"'
     );
     expect(bindings).to.eql([1, 'a', 10, 2, 'b', 20]);
@@ -53,7 +53,7 @@ describe('batchUpdate (db-less)', function () {
   it('cockroachdb and redshift reuse the postgres FROM form', function () {
     const expected =
       'update "users" set "name" = "v"."name", "age" = "v"."age" from ' +
-      '(select ?::numeric as "id", ?::text as "name", ?::numeric as "age" ' +
+      '(select ?::bigint as "id", ?::text as "name", ?::bigint as "age" ' +
       'union all select ?, ?, ?) as "v" where "users"."id" = "v"."id"';
     expect(
       clients['cockroachdb']('users')
@@ -124,7 +124,7 @@ describe('batchUpdate (db-less)', function () {
         .toSQL().sql
     ).to.equal(
       'update "users" set "name" = "v"."name" from ' +
-        '(select ?::numeric as "tenant", ?::numeric as "id", ?::text as "name" ' +
+        '(select ?::bigint as "tenant", ?::bigint as "id", ?::text as "name" ' +
         'union all select ?, ?, ?) as "v" ' +
         'where "users"."tenant" = "v"."tenant" and "users"."id" = "v"."id"'
     );
@@ -172,7 +172,7 @@ describe('batchUpdate (db-less)', function () {
         ['flag', 'when', 'buf', 'doc', 'note']
       )
       .toSQL();
-    expect(sql).to.contain('?::numeric as "id"');
+    expect(sql).to.contain('?::bigint as "id"');
     expect(sql).to.contain('?::boolean as "flag"');
     expect(sql).to.contain('?::timestamptz as "when"');
     expect(sql).to.contain('?::bytea as "buf"');
@@ -204,12 +204,49 @@ describe('batchUpdate (db-less)', function () {
         ['n']
       )
       .toSQL().sql;
-    expect(inferred).to.contain('?::numeric as "n"');
+    expect(inferred).to.contain('?::bigint as "n"');
     // all-null column -> text fallback
     const allNull = clients['pg']('users')
       .batchUpdate([{ id: 1, n: null }], ['id'], ['n'])
       .toSQL().sql;
     expect(allNull).to.contain('?::text as "n"');
+  });
+
+  it('casts a number column holding a fraction to numeric (postgres)', function () {
+    expect(
+      clients['pg']('users')
+        .batchUpdate(
+          [
+            { id: 1, n: 1 },
+            { id: 2, n: 1.5 },
+          ],
+          ['id'],
+          ['n']
+        )
+        .toSQL().sql
+    ).to.equal(
+      'update "users" set "n" = "v"."n" from (select ?::bigint as "id", ?::numeric as "n" union all select ?, ?) as "v" where "users"."id" = "v"."id"'
+    );
+  });
+
+  it('leaves a raw first-row cell uncast in union mode (postgres)', function () {
+    const knex = clients['pg'];
+    expect(
+      knex('users')
+        .batchUpdate(
+          [
+            { id: 1, age: knex.raw('40 + 2'), seen: knex.fn.now() },
+            { id: 2, age: 3, seen: new Date(0) },
+          ],
+          ['id'],
+          ['age', 'seen']
+        )
+        .toSQL()
+        .toNative()
+    ).to.eql({
+      sql: 'update "users" set "age" = "v"."age", "seen" = "v"."seen" from (select $1::bigint as "id", 40 + 2 as "age", CURRENT_TIMESTAMP as "seen" union all select $2, $3, $4) as "v" where "users"."id" = "v"."id"',
+      bindings: [1, 2, 3, new Date(0)],
+    });
   });
 
   it('infers bigint and honors the columnTypes override (postgres)', function () {
@@ -705,6 +742,107 @@ describe('batchUpdate (db-less)', function () {
       );
     });
 
+    it('rejects an aliased table', function () {
+      expect(() => clients['pg'].batchUpdate('users as u', rows))
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          'Invalid tableName: Expected a table name without an alias, got "users as u"'
+        );
+    });
+
+    it('rejects a raw table', function () {
+      const knex = clients['pg'];
+      expect(() => knex.batchUpdate(knex.raw('users'), rows))
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          'Invalid tableName: Expected a table name without an alias, got object'
+        );
+    });
+
+    it("rejects a raw value in 'json' mode", function () {
+      const knex = clients['pg'];
+      expect(() =>
+        knex.batchUpdate('users', [{ id: 1, seen: knex.fn.now() }], 'id', {
+          mode: 'json',
+        })
+      )
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          "Invalid batch: seen holds a raw value; 'json' mode can't carry SQL, use mode 'case'"
+        );
+    });
+
+    it("rejects a subquery value in 'json' mode", function () {
+      const knex = clients['sqlite3'];
+      expect(() =>
+        knex.batchUpdate(
+          'users',
+          [{ id: 1, age: knex('ages').max('age') }],
+          'id',
+          { mode: 'json' }
+        )
+      )
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          "Invalid batch: age holds a raw value; 'json' mode can't carry SQL, use mode 'case'"
+        );
+    });
+
+    it('rejects a null key', function () {
+      expect(() =>
+        prepareBatch(
+          [
+            { id: 1, name: 'a' },
+            { id: null, name: 'b' },
+          ],
+          ['id'],
+          'last'
+        )
+      )
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          'Invalid batch: key id is null in row 1; a key must match one row by equality'
+        );
+    });
+
+    it('rejects an undefined key', function () {
+      expect(() =>
+        prepareBatch(
+          [{ tenant: 1, id: undefined, name: 'a' }],
+          ['tenant', 'id'],
+          'last'
+        )
+      )
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          'Invalid batch: key id is undefined in row 0; a key must match one row by equality'
+        );
+    });
+
+    it('rejects a key column mixing JS types', function () {
+      expect(() =>
+        prepareBatch(
+          [
+            { id: 1, name: 'a' },
+            { id: '1', name: 'b' },
+          ],
+          ['id'],
+          'last'
+        )
+      )
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          'Invalid batch: key id holds both number and string values; pass one type so duplicate keys are found'
+        );
+    });
+
     it("rejects a columnTypes map in 'json' mode on the postgres family", function () {
       for (const dialect of ['pg', 'cockroachdb']) {
         expect(() =>
@@ -938,6 +1076,32 @@ describe('batchUpdate (db-less)', function () {
         { tenant: 7, id: 1, v: 'c' },
         { tenant: 8, id: 1, v: 'b' },
       ]);
+    });
+
+    it('dedupes equal Date keys', function () {
+      expect(
+        prepareBatch(
+          [
+            { at: new Date(0), v: 'a' },
+            { at: new Date(0), v: 'b' },
+          ],
+          ['at'],
+          'last'
+        ).rows
+      ).to.eql([{ at: new Date(0), v: 'b' }]);
+    });
+
+    it('dedupes equal Buffer keys', function () {
+      expect(
+        prepareBatch(
+          [
+            { token: Buffer.from('ab'), v: 'a' },
+            { token: Buffer.from('ab'), v: 'b' },
+          ],
+          ['token'],
+          'last'
+        ).rows
+      ).to.eql([{ token: Buffer.from('ab'), v: 'b' }]);
     });
 
     it('throws on a duplicate key when requested', function () {

@@ -1018,6 +1018,89 @@ describe('Updates', function () {
           ]);
         });
 
+        it("writes varchar and char columns resolved with 'from_db' in full", async function () {
+          if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+            return this.skip();
+          }
+          await knex.schema.dropTableIfExists('codes');
+          await knex.raw(
+            'create table codes (id integer primary key, label varchar(5), code char(3))'
+          );
+          await knex('codes').insert([
+            { id: 1, label: 'old', code: 'old' },
+            { id: 2, label: 'decoy', code: 'dec' },
+          ]);
+
+          await knex.batchUpdate(
+            'public.codes',
+            [{ id: 1, label: 'abcde', code: 'xyz' }],
+            'id',
+            { mode: 'union', columnTypes: 'from_db' }
+          );
+
+          const rows = await knex('codes').orderBy('id');
+          await knex.schema.dropTableIfExists('codes');
+          expect(rows.map((r) => [Number(r.id), r.label, r.code])).to.eql([
+            [1, 'abcde', 'xyz'],
+            [2, 'decoy', 'dec'],
+          ]);
+        });
+
+        it("rejects a value too long for a varchar column resolved with 'from_db', as .update() does", async function () {
+          if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+            return this.skip();
+          }
+          await knex.schema.dropTableIfExists('codes');
+          await knex.raw(
+            'create table codes (id integer primary key, label varchar(5))'
+          );
+          await knex('codes').insert({ id: 1, label: 'old' });
+
+          let error;
+          try {
+            await knex.batchUpdate(
+              'codes',
+              [{ id: 1, label: 'abcdefgh' }],
+              'id',
+              { mode: 'union', columnTypes: 'from_db' }
+            );
+          } catch (caught) {
+            error = caught;
+          }
+          const rows = await knex('codes');
+          await knex.schema.dropTableIfExists('codes');
+          expect(error.code).to.equal('22001');
+          expect(rows.map((r) => r.label)).to.eql(['old']);
+        });
+
+        it("writes raw values in 'union' and 'case' mode as .update() does", async function () {
+          if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+            return this.skip();
+          }
+          await knex.batchUpdate(
+            'members',
+            [
+              { id: 1, age: knex.raw('40 + 2') },
+              { id: 2, age: 7 },
+            ],
+            'id',
+            { mode: 'union' }
+          );
+          await knex.batchUpdate(
+            'members',
+            [{ id: 2, age: knex.raw('?? + 1', ['age']) }],
+            'id',
+            { mode: 'case' }
+          );
+
+          const rows = await knex('members').orderBy('id');
+          expect(rows.map((r) => [Number(r.id), Number(r.age)])).to.eql([
+            [1, 42],
+            [2, 8],
+            [3, 99],
+          ]);
+        });
+
         it('returns the requested columns on postgres-family dialects', async function () {
           if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
             return this.skip();
@@ -1355,6 +1438,80 @@ describe('Updates', function () {
             );
           });
         }
+
+        it("updates rows keyed by a Buffer in 'json' mode", async function () {
+          if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+            return this.skip();
+          }
+          await knex.schema.dropTableIfExists('tokens');
+          await knex.raw(
+            'create table tokens (token bytea primary key, label text)'
+          );
+          await knex('tokens').insert([
+            { token: Buffer.from('aa', 'hex'), label: 'old' },
+            { token: Buffer.from('bb', 'hex'), label: 'decoy' },
+          ]);
+
+          await knex.batchUpdate(
+            'tokens',
+            [{ token: Buffer.from('aa', 'hex'), label: 'new' }],
+            'token',
+            { mode: 'json' }
+          );
+
+          const rows = await knex('tokens').orderBy('token');
+          await knex.schema.dropTableIfExists('tokens');
+          expect(
+            rows.map((r) => [Buffer.from(r.token).toString('hex'), r.label])
+          ).to.eql([
+            ['aa', 'new'],
+            ['bb', 'decoy'],
+          ]);
+        });
+
+        it('json mode auto-splits a blob update keyed by a uuid', async function () {
+          if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+            return this.skip();
+          }
+          await knex.schema.dropTableIfExists('files');
+          await knex.raw(
+            'create table files (id uuid primary key, label text, data bytea)'
+          );
+          await knex('files').insert([
+            {
+              id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+              label: 'old',
+              data: Buffer.from('old'),
+            },
+            {
+              id: 'b1ffcd00-0d1c-4ef8-bb6d-6bb9bd380a22',
+              label: 'decoy',
+              data: Buffer.from('decoy'),
+            },
+          ]);
+
+          await knex.batchUpdate(
+            'files',
+            [
+              {
+                id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+                label: 'new',
+                data: Buffer.from('new'),
+              },
+            ],
+            'id',
+            { mode: 'json' }
+          );
+
+          const rows = await knex('files').orderBy('id');
+          await knex.schema.dropTableIfExists('files');
+          expect(
+            rows.map((r) => [r.id, r.label, Buffer.from(r.data).toString()])
+          ).to.eql([
+            ['a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'new', 'new'],
+            ['b1ffcd00-0d1c-4ef8-bb6d-6bb9bd380a22', 'decoy', 'decoy'],
+          ]);
+        });
 
         it('json mode auto-splits: json for the label, union/per-row for the blob', async function () {
           // json can't carry a Buffer, so the executor updates `label` with a

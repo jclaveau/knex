@@ -921,6 +921,41 @@ describe('batchUpdate (db-less)', function () {
           "Invalid batch: age holds a raw value or a subquery; 'json' mode can't carry SQL, use mode 'case'"
         );
     });
+    it("rejects a raw value nested in an array in 'json' mode", function () {
+      const knex = clients['pg'];
+      expect(() =>
+        knex.batchUpdate(
+          'users',
+          [{ id: 1, tags: [knex.raw('now()')] }],
+          'id',
+          {
+            mode: 'json',
+          }
+        )
+      )
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          "Invalid batch: tags holds a raw value or a subquery; 'json' mode can't carry SQL, use mode 'case'"
+        );
+    });
+
+    it("rejects a raw value nested in an object in 'json' mode", function () {
+      const knex = clients['pg'];
+      expect(() =>
+        knex.batchUpdate(
+          'users',
+          [{ id: 1, meta: { seen: { at: knex.fn.now() } } }],
+          'id',
+          { mode: 'json' }
+        )
+      )
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          "Invalid batch: meta holds a raw value or a subquery; 'json' mode can't carry SQL, use mode 'case'"
+        );
+    });
 
     it('rejects a null key', function () {
       expect(() =>
@@ -1134,6 +1169,69 @@ describe('batchUpdate (db-less)', function () {
         `columnTypes 'from_db': users has no column mood`
       );
     });
+    it("names a missing column when 'json' reads the catalog for a Buffer key", async function () {
+      const knex = knexLib({ client: 'pg' });
+      knex.client.batchUpdateColumnTypesFromDb = async () => ({
+        id: '"pg_catalog"."bytea"',
+      });
+      let error;
+      try {
+        await knex
+          .batchUpdate('users', [{ id: Buffer.from('a'), nope: 'x' }], 'id', {
+            mode: 'json',
+          })
+          .transacting(knex);
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error.message).to.equal('Invalid batch: users has no column nope');
+    });
+
+    it("refuses an unsafe catalog type when 'json' reads it for a Buffer key", async function () {
+      const knex = knexLib({ client: 'pg' });
+      knex.client.batchUpdateColumnTypesFromDb = async () => ({
+        id: '"pg_catalog"."bytea"',
+        mood: 'USER-DEFINED',
+      });
+      let error;
+      try {
+        await knex
+          .batchUpdate('users', [{ id: Buffer.from('a'), mood: 'x' }], 'id', {
+            mode: 'json',
+          })
+          .transacting(knex);
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error.message).to.equal(
+        `Invalid batch: column mood has type "USER-DEFINED", which is not a valid type name; pass mode 'union' with a columnTypes entry for it`
+      );
+    });
+
+    it("skips the 'from_db' query when 'json' runs a Buffer key as 'union'", async function () {
+      const knex = knexLib({ client: 'mysql' });
+      const statements = [];
+      knex.client.acquireConnection = async () => ({ __knexUid: 'stub' });
+      knex.client.releaseConnection = async () => {};
+      knex.client._query = async (connection, query) => {
+        statements.push(query.sql);
+        return query;
+      };
+      knex.client.processResponse = () => [];
+      knex.client.batchUpdateColumnTypesFromDb = async () => {
+        statements.push('from_db');
+        return { id: 'varbinary(4)', name: 'text' };
+      };
+      await knex
+        .batchUpdate('users', [{ id: Buffer.from('a'), name: 'x' }], 'id', {
+          mode: 'json',
+          columnTypes: 'from_db',
+        })
+        .transacting(knex);
+      expect(statements).to.eql([
+        'update `users` inner join (select ? as `id`, ? as `name`) as `src` on `users`.`id` = `src`.`id` set `users`.`name` = `src`.`name`',
+      ]);
+    });
 
     it("accepts the 'from_data' and 'from_db' columnTypes strategies", function () {
       // These strategies resolve in the executor (from_db reads columnInfo), so
@@ -1267,6 +1365,33 @@ describe('batchUpdate (db-less)', function () {
           'throw'
         )
       ).to.throw(/duplicate key/);
+    });
+    it('throws on a duplicate object key when requested', function () {
+      expect(() =>
+        prepareBatch(
+          [
+            { id: { a: 1 }, v: 'a' },
+            { id: { a: 1 }, v: 'b' },
+          ],
+          ['id'],
+          'throw'
+        )
+      ).to.throw(
+        `Invalid batch: duplicate key [{"a":1}] (use onDuplicateKey: 'last' to keep the last row instead)`
+      );
+    });
+
+    it('dedupes equal array keys', function () {
+      expect(
+        prepareBatch(
+          [
+            { id: [1, 2], v: 'a' },
+            { id: [1, 2], v: 'b' },
+          ],
+          ['id'],
+          'last'
+        ).rows
+      ).to.eql([{ id: [1, 2], v: 'b' }]);
     });
   });
 });

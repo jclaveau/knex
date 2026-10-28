@@ -956,6 +956,93 @@ describe('batchUpdate (db-less)', function () {
           "Invalid batch: meta holds a raw value or a subquery; 'json' mode can't carry SQL, use mode 'case'"
         );
     });
+    it("rejects a value whose toJSON returns a raw in 'json' mode", function () {
+      const knex = clients['pg'];
+      expect(() =>
+        knex.batchUpdate(
+          'users',
+          [{ id: 1, meta: { toJSON: () => knex.raw('now()') } }],
+          'id',
+          { mode: 'json' }
+        )
+      )
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          "Invalid batch: meta holds a raw value or a subquery; 'json' mode can't carry SQL, use mode 'case'"
+        );
+    });
+
+    it("binds a nested object through its toJSON in 'json' mode", async function () {
+      const knex = knexLib({ client: 'pg' });
+      const statements = [];
+      knex.client.acquireConnection = async () => ({ __knexUid: 'stub' });
+      knex.client.releaseConnection = async () => {};
+      knex.client._query = async (connection, query) => {
+        statements.push([query.sql, query.bindings]);
+        return query;
+      };
+      knex.client.processResponse = () => [];
+      await knex
+        .batchUpdate(
+          'users',
+          [{ id: 1, meta: { seen: { toJSON: () => 1 }, format: () => 'x' } }],
+          'id',
+          { mode: 'json' }
+        )
+        .transacting(knex);
+      expect(statements).to.eql([
+        [
+          'update "users" set "meta" = "v"."meta" from jsonb_populate_recordset(null::"users", $1) as "v" where "users"."id" = "v"."id"',
+          ['[{"id":1,"meta":{"seen":1}}]'],
+        ],
+      ]);
+    });
+
+    it("refuses a cyclic value in 'json' mode with the circular-structure error", async function () {
+      const knex = knexLib({ client: 'pg' });
+      knex.client.acquireConnection = async () => ({ __knexUid: 'stub' });
+      knex.client.releaseConnection = async () => {};
+      knex.client._query = async (connection, query) => query;
+      knex.client.processResponse = () => [];
+      const meta = {};
+      meta.self = meta;
+      let error;
+      try {
+        await knex
+          .batchUpdate('users', [{ id: 1, meta }], 'id', { mode: 'json' })
+          .transacting(knex);
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error.message).to.equal(
+        "Converting circular structure to JSON\n    --> starting at object with constructor 'Object'\n    --- property 'self' closes the circle"
+      );
+    });
+
+    it("names a missing column when 'json' reads the catalog for a Buffer column", async function () {
+      const knex = knexLib({ client: 'pg' });
+      knex.client.acquireConnection = async () => ({ __knexUid: 'stub' });
+      knex.client.releaseConnection = async () => {};
+      knex.client._query = async (connection, query) => query;
+      knex.client.processResponse = () => [];
+      knex.client.batchUpdateColumnTypesFromDb = async () => ({
+        id: '"pg_catalog"."int4"',
+      });
+      let error;
+      try {
+        await knex
+          .batchUpdate('users', [{ id: 1, avatar: Buffer.from('a') }], 'id', {
+            mode: 'json',
+          })
+          .transacting(knex);
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error.message).to.equal(
+        'Invalid batch: users has no column avatar'
+      );
+    });
 
     it('rejects a null key', function () {
       expect(() =>
@@ -1379,6 +1466,40 @@ describe('batchUpdate (db-less)', function () {
       ).to.throw(
         `Invalid batch: duplicate key [{"a":1}] (use onDuplicateKey: 'last' to keep the last row instead)`
       );
+    });
+
+    it('throws on a duplicate object key holding a bigint when requested', function () {
+      expect(() =>
+        prepareBatch(
+          [
+            { id: { a: 1n }, v: 'a' },
+            { id: { a: 1n }, v: 'b' },
+          ],
+          ['id'],
+          'throw'
+        )
+      ).to.throw(
+        `Invalid batch: duplicate key [{"a":"1"}] (use onDuplicateKey: 'last' to keep the last row instead)`
+      );
+    });
+
+    it('keeps raw keys as distinct rows', function () {
+      const knex = knexLib({ client: 'pg' });
+      const firstKey = knex.raw('?', [1]);
+      const secondKey = knex.raw('?', [2]);
+      expect(
+        prepareBatch(
+          [
+            { id: firstKey, v: 'a' },
+            { id: secondKey, v: 'b' },
+          ],
+          ['id'],
+          'last'
+        ).rows
+      ).to.eql([
+        { id: firstKey, v: 'a' },
+        { id: secondKey, v: 'b' },
+      ]);
     });
 
     it('dedupes equal array keys', function () {

@@ -86,29 +86,34 @@ past 1.0 as batches grow.
 Postgres has no small compound-SELECT cap, so `union` runs at every size here —
 which lets the three be compared head to head.
 
-| rows×cols | mode  | SQL bytes | params | exec ms |
-| --------- | ----- | --------: | -----: | ------: |
-| 1000×3    | union |    28,161 |  4,000 |      36 |
-| 1000×3    | case  |   107,101 |  7,000 |      59 |
-| 1000×3    | json  |       179 |  **1** |   **8** |
-| 1000×20   | union |    79,718 | 21,000 |      98 |
-| 1000×20   | case  |   600,580 | 41,000 |     272 |
-| 1000×20   | json  |       685 |  **1** |  **21** |
-| 10000×3   | union |   280,161 | 40,000 |     289 |
-| 10000×3   | case  | 1,070,101 | 70,000 |   1,201 |
-| 10000×3   | json  |       179 |  **1** |  **77** |
+CI run of 0c32392c, with the `'case'` chunk cap of
+[PostgreSQL case chunk size](#postgresql-case-chunk-size):
+
+| rows×cols | mode  | SQL bytes | params | chunks | exec ms |
+| --------- | ----- | --------: | -----: | -----: | ------: |
+| 1000×3    | union |    28,160 |  4,000 |      1 |      39 |
+| 1000×3    | case  |    90,121 |  7,000 |      4 |      39 |
+| 1000×3    | json  |       153 |  **1** |      1 |  **12** |
+| 1000×20   | union |    79,717 | 21,000 |      1 |     106 |
+| 1000×20   | case  |   583,600 | 41,000 |     20 |     170 |
+| 1000×20   | json  |       462 |  **1** |      1 |  **36** |
+| 10000×3   | union |   280,160 | 40,000 |      1 |     387 |
+| 10000×3   | case  |   900,121 | 70,000 |     31 |     331 |
+| 10000×3   | json  |       153 |  **1** |      1 | **101** |
 
 `columnTypes` overhead (pg, json, 1000×5): `from_data` 9.2ms, `from_db` 16.7ms.
 
 Postgres findings:
 
-- **json wins decisively** — one bound parameter and a flat ~179-byte statement
-  regardless of size; ~3.7× faster than `union` and ~16× faster than `case` at
+- **json wins decisively** — one bound parameter and a flat ~153-byte statement
+  regardless of size; ~3.8× faster than `union` and ~3.3× faster than `case` at
   10000×3. (Note: pg json binds **1** param vs sqlite's 5 — sqlite also binds the
   `json_extract` path strings.)
 - **union is solid on pg** (no compound-SELECT limit) but grows linearly — 280KB
   / 40k params at 10000×3.
-- **case is the slowest everywhere** and the largest by far (1MB at 10000×3).
+- **case is the largest by far** (900KB at 10000×3). Chunked at its measured
+  cap it overtakes `union` at 10000×3 (331 ms vs 387 ms) but stays the slowest on
+  wide rows (1000×20: 170 ms vs 106 ms).
 - **`from_db` costs a real round-trip on pg** (~7.5ms, ~80% over `from_data`
   here) — fine as an opt-in, never something to put on the default path.
 
@@ -189,17 +194,20 @@ sweep and move the budget.
 CASE list, so a wide row wants a short chunk. A composite key's WHERE is an OR
 chain that PostgreSQL plans as a BitmapOr of one index scan per row, and its
 planning time grows faster than the chain: `EXPLAIN ANALYZE` on a 10000-row
-table gives 2.5 ms planning + 2.7 ms execution at 50 rows, 679 ms planning +
-49 ms execution at 1000. CockroachDB inherits the cap; Redshift keeps
-`chunkSize` and the bind cap until it is measured.
+table gives 2.5 ms planning and 2.7 ms execution at 50 rows, 679 ms planning
+and 49 ms execution at 1000. That plan needs a table much larger than the
+chunk: on an analyzed 2000-row table a 1000-row chunk takes a seq scan with
+13 ms planning, so a big chunk only costs on big tables, where it matters.
+CockroachDB inherits the cap; Redshift keeps `chunkSize` and the bind cap until
+it is measured.
 
 `benchCaseChunkSize` in `batch-update-benchmark.js` prints these tables
-(`DB=postgres` / `DB=cockroachdb`, 10000 rows, median wall ms of 3 runs;
-column headers are the forced row cap). The integration test "runs a
-composite-key case batch fastest at the shipped PostgreSQL chunk" pins the
-2 keys × 1 column row on an analyzed 2000-row table (shipped 50 beats 5 and
-1000), so a PostgreSQL release that changes this fails CI: re-run the sweep and
-move the cap.
+(`DB=postgres` / `DB=cockroachdb`, 10000 rows, median wall ms of 3 runs; column
+headers are the forced row cap). The integration test "runs a composite-key case
+batch fastest at the shipped PostgreSQL chunk" pins the 2 keys × 1 column row,
+updating 2000 rows of an analyzed 10000-row table (shipped 50 beats 5 and 1000),
+so a PostgreSQL release that changes this fails CI: re-run the sweep and move
+the cap.
 
 PostgreSQL (postgres:16):
 

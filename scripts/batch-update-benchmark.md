@@ -179,3 +179,46 @@ sweep and move the budget.
 |    3 |    3 |  312 |  230 |  196 |  174 |  176 |  247 |   335 |          16 |
 |    3 |   10 |  671 |  533 |  483 |  692 |  876 | 1622 |  3122 |           5 |
 |    3 |   20 | 1046 | 1087 | 1332 | 1754 | 2793 | 6322 | 11894 |           2 |
+
+## PostgreSQL case chunk size
+
+`Client_PG#batchUpdateRowLimit` caps a `'case'` chunk at
+`floor(CASE_BRANCH_BUDGET / columns)` rows (at least 1), with
+`CASE_BRANCH_BUDGET = 1000`, and a composite key's chunk at
+`COMPOSITE_CASE_ROWS = 50`. As on SQLite each updated row walks every column's
+CASE list, so a wide row wants a short chunk. A composite key's WHERE is an OR
+chain that PostgreSQL plans as a BitmapOr of one index scan per row, and its
+planning time grows faster than the chain: `EXPLAIN ANALYZE` on a 10000-row
+table gives 2.5 ms planning + 2.7 ms execution at 50 rows, 679 ms planning +
+49 ms execution at 1000. CockroachDB inherits the cap; Redshift keeps
+`chunkSize` and the bind cap until it is measured.
+
+`benchCaseChunkSize` in `batch-update-benchmark.js` prints these tables
+(`DB=postgres` / `DB=cockroachdb`, 10000 rows, median wall ms of 3 runs;
+column headers are the forced row cap). The integration test "runs a
+composite-key case batch fastest at the shipped PostgreSQL chunk" pins the
+2 keys × 1 column row on an analyzed 2000-row table (shipped 50 beats 5 and
+1000), so a PostgreSQL release that changes this fails CI: re-run the sweep and
+move the cap.
+
+PostgreSQL (postgres:16):
+
+| keys | cols |    5 |   10 |   25 |   50 |  100 |  250 |  500 |  1000 | shipped cap |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ----: | ----------: |
+|    1 |    1 | 1689 |  729 |  500 |  404 |  309 |  321 |  271 |   306 |        1000 |
+|    1 |    3 | 1841 | 1527 |  815 |  653 |  620 |  557 |  577 |   836 |         333 |
+|    1 |   10 | 3502 | 2437 | 1836 | 1617 | 1555 | 1710 | 2148 |  2660 |         100 |
+|    2 |    1 | 2133 | 1567 | 1298 | 1265 | 1725 | 1908 | 1901 |  5972 |          50 |
+|    2 |    3 | 2666 | 2226 | 1809 | 1958 | 1910 | 2329 | 3878 |  6645 |          50 |
+|    2 |   10 | 4944 | 4060 | 3831 | 3520 | 3676 | 4740 | 6535 | 10851 |          50 |
+
+CockroachDB:
+
+| keys | cols |     5 |    10 |    25 |    50 |   100 |   250 |   500 |  1000 | shipped cap |
+| ---: | ---: | ----: | ----: | ----: | ----: | ----: | ----: | ----: | ----: | ----------: |
+|    1 |    1 | 13312 |  7523 |  3680 |  2588 |  2331 |  1927 |  1743 |  2006 |        1000 |
+|    1 |    3 | 11755 |  8225 |  4081 |  3083 |  3077 |  3696 |  3734 |  4901 |         333 |
+|    1 |   10 | 10977 |  8342 |  7535 |  6686 |  6443 |  6448 |  7789 | 10822 |         100 |
+|    2 |    1 | 11218 |  6593 |  5210 |  3611 |  3993 |  4143 |  3870 |  5168 |          50 |
+|    2 |    3 | 12996 |  7614 |  6287 |  8075 |  6487 |  6697 |  7289 |  7933 |          50 |
+|    2 |   10 | 19586 | 12598 | 14780 | 10932 | 12150 | 14394 | 17227 | 25052 |          50 |

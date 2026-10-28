@@ -1404,6 +1404,24 @@ describe('batchUpdate (db-less)', function () {
       }
     });
 
+    it('caps a case chunk by key and column count on the measured dialects', function () {
+      expect(clients['pg'].client.batchUpdateRowLimit('case', 1, 3)).to.equal(
+        333
+      );
+      expect(clients['pg'].client.batchUpdateRowLimit('case', 2, 3)).to.equal(
+        50
+      );
+      expect(
+        clients['cockroachdb'].client.batchUpdateRowLimit('case', 2, 3)
+      ).to.equal(50);
+      expect(
+        clients['redshift'].client.batchUpdateRowLimit('case', 2, 3)
+      ).to.equal(Infinity);
+      expect(clients['pg'].client.batchUpdateRowLimit('union', 2, 3)).to.equal(
+        Infinity
+      );
+    });
+
     it('throws on Redshift for bytea/jsonb casts it has no type for', function () {
       expect(() =>
         clients['redshift']('users')

@@ -278,27 +278,44 @@ async function benchBlobs(knex) {
   await knex.schema.dropTableIfExists('bench_blobs');
 }
 
-// Picks SQLite's row cap for a 'case' chunk (Client_SQLite3#batchUpdateRowLimit).
-// SQLite walks each column's CASE list for every row it updates, so a statement
-// costs about rows × columns × chunk and a smaller chunk is cheaper until the
-// per-statement overhead takes over. Times every cap on each key × column shape
-// as the median CPU ms of CASE_CHUNK_RUNS runs (SQLite runs in-process, so the
-// process CPU time covers the engine too).
-const CASE_CHUNK_CAPS = [1, 2, 5, 10, 20, 50, 100];
-const CASE_CHUNK_ROWS = 2000;
-const CASE_CHUNK_RUNS = 5;
+// Picks the row cap for a 'case' chunk (each dialect's batchUpdateRowLimit).
+// Each updated row walks every column's CASE list, so a statement costs about
+// rows × columns × chunk and a smaller chunk is cheaper until the per-statement
+// overhead takes over. Times every cap on each key × column shape, as the median
+// of `runs` runs: process CPU ms on SQLite (in-process, so it covers the engine
+// too), wall ms on a server dialect, whose work runs outside this process.
+// CockroachDB reports the postgresql dialect, so it takes the same sweep.
+const CASE_CHUNK_SWEEPS = {
+  sqlite3: {
+    caps: [1, 2, 5, 10, 20, 50, 100],
+    rows: 2000,
+    runs: 5,
+    keyCounts: [1, 2, 3],
+    columnCounts: [1, 3, 10, 20],
+    metric: 'CPU',
+  },
+  postgresql: {
+    caps: [5, 10, 25, 50, 100, 250, 500, 1000],
+    rows: 10000,
+    runs: 3,
+    keyCounts: [1, 2],
+    columnCounts: [1, 3, 10],
+    metric: 'wall',
+  },
+};
 
 async function benchCaseChunkSize(knex) {
-  if (knex.client.dialect !== 'sqlite3') {
+  const sweep = CASE_CHUNK_SWEEPS[knex.client.dialect];
+  if (!sweep) {
     return;
   }
   console.log(
-    `\n## SQLite case chunk size (${CASE_CHUNK_ROWS} rows, median CPU ms of ${CASE_CHUNK_RUNS} runs)\n`
+    `\n## ${knex.client.config.client} case chunk size (${sweep.rows} rows, median ${sweep.metric} ms of ${sweep.runs} runs)\n`
   );
-  console.log(`| keys | cols | ${CASE_CHUNK_CAPS.join(' | ')} | shipped cap |`);
-  console.log(`|---:|---:|${CASE_CHUNK_CAPS.map(() => '---:|').join('')}---:|`);
-  for (const keyCount of [1, 2, 3]) {
-    for (const colCount of [1, 3, 10, 20]) {
+  console.log(`| keys | cols | ${sweep.caps.join(' | ')} | shipped cap |`);
+  console.log(`|---:|---:|${sweep.caps.map(() => '---:|').join('')}---:|`);
+  for (const keyCount of sweep.keyCounts) {
+    for (const colCount of sweep.columnCounts) {
       const keyColumns = Array.from({ length: keyCount }, (_, i) => `k${i}`);
       const columns = Array.from({ length: colCount }, (_, i) => `c${i}`);
       await knex.schema.dropTableIfExists('bench_case');
@@ -312,7 +329,7 @@ async function benchCaseChunkSize(knex) {
         table.primary(keyColumns);
       });
       const buildRows = (label) =>
-        Array.from({ length: CASE_CHUNK_ROWS }, (_, id) => {
+        Array.from({ length: sweep.rows }, (_, id) => {
           const row = {};
           for (const [index, column] of keyColumns.entries()) {
             row[column] = index === 0 ? id : 1;
@@ -333,18 +350,21 @@ async function benchCaseChunkSize(knex) {
         colCount
       );
       const cells = [];
-      for (const cap of CASE_CHUNK_CAPS) {
+      for (const cap of sweep.caps) {
         knex.client.batchUpdateRowLimit = () => cap;
         const samples = [];
-        for (let run = 0; run < CASE_CHUNK_RUNS; run++) {
+        for (let run = 0; run < sweep.runs; run++) {
           const updates = buildRows(`${cap}-${run}`);
           const cpuStart = process.cpuUsage();
+          const wallStart = process.hrtime.bigint();
           await knex.batchUpdate('bench_case', updates, keyColumns, {
             mode: 'case',
-            chunkSize: CASE_CHUNK_ROWS,
+            chunkSize: sweep.rows,
           });
+          const wallMs = Number(process.hrtime.bigint() - wallStart) / 1e6;
           const cpu = process.cpuUsage(cpuStart);
-          samples.push((cpu.user + cpu.system) / 1000);
+          const cpuMs = (cpu.user + cpu.system) / 1000;
+          samples.push(sweep.metric === 'CPU' ? cpuMs : wallMs);
         }
         delete knex.client.batchUpdateRowLimit;
         samples.sort((a, b) => a - b);

@@ -1646,6 +1646,146 @@ describe('Updates', function () {
           expect(shippedMs).to.be.below(fiftyRowMs);
         });
 
+        it('splits a composite-key case batch into 50-row chunks on PostgreSQL', async function () {
+          // A composite key stops the chunk at 50 rows whatever the column count,
+          // so 1100 rows run as ceil(1100 / 50) = 22 statements.
+          if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+            return this.skip();
+          }
+          const rows = Array.from({ length: 1100 }, (_, i) => ({
+            id: i + 101,
+            name: `n${i + 101}`,
+            age: i,
+          }));
+          await knex.batchInsert('members', rows, 100);
+          const statements = [];
+          const onQuery = (query) => {
+            if (/^\s*update\s/i.test(query.sql)) {
+              statements.push(query.sql);
+            }
+          };
+          knex.on('query', onQuery);
+          try {
+            await knex.batchUpdate(
+              'members',
+              rows.map((r) => ({ ...r, name: 'deep' })),
+              ['id', 'age'],
+              { mode: 'case' }
+            );
+          } finally {
+            knex.off('query', onQuery);
+          }
+
+          expect(statements).to.have.lengthOf(22);
+          const updated = await knex('members')
+            .where('name', 'deep')
+            .count({ c: 'id' })
+            .first();
+          expect(Number(updated.c)).to.equal(1100);
+        });
+
+        it('sizes a single-key case chunk by its column count on PostgreSQL', async function () {
+          // name and age share the 1000-branch case budget, 500 rows each, so
+          // 1100 rows run as ceil(1100 / 500) = 3 statements.
+          if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+            return this.skip();
+          }
+          const rows = Array.from({ length: 1100 }, (_, i) => ({
+            id: i + 101,
+            name: `n${i + 101}`,
+            age: i,
+          }));
+          await knex.batchInsert('members', rows, 100);
+          const statements = [];
+          const onQuery = (query) => {
+            if (/^\s*update\s/i.test(query.sql)) {
+              statements.push(query.sql);
+            }
+          };
+          knex.on('query', onQuery);
+          try {
+            await knex.batchUpdate(
+              'members',
+              rows.map((r) => ({ ...r, name: 'flat' })),
+              'id',
+              { mode: 'case' }
+            );
+          } finally {
+            knex.off('query', onQuery);
+          }
+
+          expect(statements).to.have.lengthOf(3);
+          const updated = await knex('members')
+            .where('name', 'flat')
+            .count({ c: 'id' })
+            .first();
+          expect(Number(updated.c)).to.equal(1100);
+        });
+
+        it('runs a composite-key case batch fastest at the shipped PostgreSQL chunk', async function () {
+          // Pins the measurement behind COMPOSITE_CASE_ROWS
+          // (scripts/batch-update-benchmark.md#postgresql-case-chunk-size): for
+          // 2 keys × 1 column the shipped 50-row chunk beats both a 5-row and a
+          // 1000-row chunk in wall time. If a PostgreSQL release changes how it
+          // plans the OR-joined WHERE, this fails: re-run the benchmark and move
+          // the cap.
+          if (!isPostgreSQL(knex)) {
+            return this.skip();
+          }
+          await knex.schema.dropTableIfExists('case_chunk_timing');
+          await knex.schema.createTable('case_chunk_timing', (table) => {
+            table.integer('k0');
+            table.integer('k1');
+            table.string('c0');
+            table.primary(['k0', 'k1']);
+          });
+          const buildRows = (label, length) =>
+            Array.from({ length }, (_, id) => ({
+              k0: id,
+              k1: 1,
+              c0: `${label}-${id}`,
+            }));
+          await knex.batchInsert(
+            'case_chunk_timing',
+            buildRows('seed', 2000),
+            500
+          );
+          // The planner's statistics drive the cost this pins: with them it
+          // plans one index scan per OR term, as on any analyzed table.
+          await knex.raw('analyze case_chunk_timing');
+          expect(knex.client.batchUpdateRowLimit('case', 2, 1)).to.equal(50);
+          const medianWallMs = async (cap) => {
+            knex.client.batchUpdateRowLimit = () => cap;
+            const samples = [];
+            try {
+              for (let run = 0; run < 3; run++) {
+                const updates = buildRows(`${cap}-${run}`, 2000);
+                const wallStart = process.hrtime.bigint();
+                await knex.batchUpdate(
+                  'case_chunk_timing',
+                  updates,
+                  ['k0', 'k1'],
+                  {
+                    mode: 'case',
+                  }
+                );
+                samples.push(Number(process.hrtime.bigint() - wallStart) / 1e6);
+              }
+            } finally {
+              delete knex.client.batchUpdateRowLimit;
+            }
+            return samples.sort((a, b) => a - b)[1];
+          };
+
+          const fiveRowMs = await medianWallMs(5);
+          const shippedMs = await medianWallMs(50);
+          const thousandRowMs = await medianWallMs(1000);
+          await knex.schema.dropTableIfExists('case_chunk_timing');
+
+          expect(shippedMs).to.be.below(fiveRowMs);
+          expect(shippedMs).to.be.below(thousandRowMs);
+        });
+
         // Large-batch correctness for every mode. These sizes cross each
         // dialect's per-statement limit — SQLite's 500 compound-SELECT terms and
         // expression depth, MSSQL's 2098 parameters, Oracle's 4000-byte json bind

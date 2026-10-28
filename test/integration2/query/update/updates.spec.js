@@ -1472,6 +1472,85 @@ describe('Updates', function () {
           expect(Number(updated.c)).to.equal(600);
         });
 
+        it("splits a composite-key case batch under SQLite's expression depth", async function () {
+          // A composite key's case WHERE is one OR term per row, an expression
+          // as deep as the chunk is long; SQLite caps that depth at 1000. Without
+          // the row cap the default 1000-row chunk fails ("Expression tree is
+          // too large (maximum depth 1000)"); with it, 1100 rows split into
+          // ceil(1100 / 500) = 3.
+          if (!isSQLite(knex)) {
+            return this.skip();
+          }
+          const rows = Array.from({ length: 1100 }, (_, i) => ({
+            id: i + 101,
+            name: `n${i + 101}`,
+            age: i,
+          }));
+          await knex.batchInsert('members', rows, 100);
+          const statements = [];
+          const onQuery = (query) => {
+            if (/^\s*update\s/i.test(query.sql)) {
+              statements.push(query.sql);
+            }
+          };
+          knex.on('query', onQuery);
+          try {
+            await knex.batchUpdate(
+              'members',
+              rows.map((r) => ({ ...r, name: 'deep' })),
+              ['id', 'age'],
+              { mode: 'case' }
+            );
+          } finally {
+            knex.off('query', onQuery);
+          }
+
+          expect(statements).to.have.lengthOf(3);
+          const updated = await knex('members')
+            .where('name', 'deep')
+            .count({ c: 'id' })
+            .first();
+          expect(Number(updated.c)).to.equal(1100);
+        });
+
+        it('keeps a single-key case batch in 1000-row chunks on SQLite', async function () {
+          // A single key's case WHERE is a flat IN list, under no depth cap, so
+          // only chunkSize splits it: 1100 rows run as 1000 + 100.
+          if (!isSQLite(knex)) {
+            return this.skip();
+          }
+          const rows = Array.from({ length: 1100 }, (_, i) => ({
+            id: i + 101,
+            name: `n${i + 101}`,
+            age: i,
+          }));
+          await knex.batchInsert('members', rows, 100);
+          const statements = [];
+          const onQuery = (query) => {
+            if (/^\s*update\s/i.test(query.sql)) {
+              statements.push(query.sql);
+            }
+          };
+          knex.on('query', onQuery);
+          try {
+            await knex.batchUpdate(
+              'members',
+              rows.map((r) => ({ ...r, name: 'flat' })),
+              'id',
+              { mode: 'case' }
+            );
+          } finally {
+            knex.off('query', onQuery);
+          }
+
+          expect(statements).to.have.lengthOf(2);
+          const updated = await knex('members')
+            .where('name', 'flat')
+            .count({ c: 'id' })
+            .first();
+          expect(Number(updated.c)).to.equal(1100);
+        });
+
         // Large-batch correctness for every mode. These sizes cross each
         // dialect's per-statement limit — SQLite's 500 compound-SELECT terms and
         // expression depth, MSSQL's 2098 parameters, Oracle's 4000-byte json bind

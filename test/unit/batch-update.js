@@ -1483,6 +1483,43 @@ describe('batchUpdate (db-less)', function () {
       );
     });
 
+    it('keeps non-plain object keys as distinct rows', function () {
+      class Money {
+        #amount;
+        constructor(amount) {
+          this.#amount = amount;
+        }
+      }
+      const firstKey = new Money(1);
+      const secondKey = new Money(2);
+      expect(
+        prepareBatch(
+          [
+            { id: firstKey, v: 'a' },
+            { id: secondKey, v: 'b' },
+          ],
+          ['id'],
+          'last'
+        ).rows
+      ).to.eql([
+        { id: firstKey, v: 'a' },
+        { id: secondKey, v: 'b' },
+      ]);
+    });
+
+    it('dedupes object keys whatever their property order', function () {
+      expect(
+        prepareBatch(
+          [
+            { id: { a: 1, n: { c: 1, d: 2 } }, v: 'a' },
+            { id: { n: { d: 2, c: 1 }, a: 1 }, v: 'b' },
+          ],
+          ['id'],
+          'last'
+        ).rows
+      ).to.eql([{ id: { n: { d: 2, c: 1 }, a: 1 }, v: 'b' }]);
+    });
+
     it('keeps raw keys as distinct rows', function () {
       const knex = knexLib({ client: 'pg' });
       const firstKey = knex.raw('?', [1]);

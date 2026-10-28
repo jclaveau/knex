@@ -1539,6 +1539,168 @@ describe('batchUpdate (db-less)', function () {
       ]);
     });
 
+    it('throws on a duplicate raw key when requested', function () {
+      const knex = knexLib({ client: 'pg' });
+      const sharedKey = knex.raw('?', [1]);
+      expect(() =>
+        prepareBatch(
+          [
+            { id: sharedKey, v: 'x' },
+            { id: sharedKey, v: 'y' },
+          ],
+          ['id'],
+          'throw'
+        )
+      ).to.throw(
+        `Invalid batch: duplicate key ["[Raw]"] (use onDuplicateKey: 'last' to keep the last row instead)`
+      );
+    });
+
+    it('keeps raw composite keys as distinct rows', function () {
+      const knex = knexLib({ client: 'pg' });
+      const firstKey = knex.raw('?', [1]);
+      const secondKey = knex.raw('?', [2]);
+      expect(
+        prepareBatch(
+          [
+            { a: firstKey, b: 1, v: 'x' },
+            { a: secondKey, b: 1, v: 'y' },
+          ],
+          ['a', 'b'],
+          'last'
+        ).rows
+      ).to.eql([
+        { a: firstKey, b: 1, v: 'x' },
+        { a: secondKey, b: 1, v: 'y' },
+      ]);
+    });
+
+    it('dedupes a raw composite key used twice', function () {
+      const knex = knexLib({ client: 'pg' });
+      const sharedKey = knex.raw('?', [1]);
+      expect(
+        prepareBatch(
+          [
+            { a: sharedKey, b: 1, v: 'x' },
+            { a: sharedKey, b: 1, v: 'y' },
+          ],
+          ['a', 'b'],
+          'last'
+        ).rows
+      ).to.eql([{ a: sharedKey, b: 1, v: 'y' }]);
+    });
+
+    it('throws on a duplicate raw composite key when requested', function () {
+      const knex = knexLib({ client: 'pg' });
+      const sharedKey = knex.raw('?', [1]);
+      expect(() =>
+        prepareBatch(
+          [
+            { a: sharedKey, b: 1, v: 'x' },
+            { a: sharedKey, b: 1, v: 'y' },
+          ],
+          ['a', 'b'],
+          'throw'
+        )
+      ).to.throw(
+        `Invalid batch: duplicate key ["[Raw]",1] (use onDuplicateKey: 'last' to keep the last row instead)`
+      );
+    });
+
+    it('keeps non-plain object composite keys as distinct rows', function () {
+      class Money {
+        #amount;
+        constructor(amount) {
+          this.#amount = amount;
+        }
+      }
+      const firstKey = new Money(1);
+      const secondKey = new Money(2);
+      expect(
+        prepareBatch(
+          [
+            { a: firstKey, b: 1, v: 'x' },
+            { a: secondKey, b: 1, v: 'y' },
+          ],
+          ['a', 'b'],
+          'last'
+        ).rows
+      ).to.eql([
+        { a: firstKey, b: 1, v: 'x' },
+        { a: secondKey, b: 1, v: 'y' },
+      ]);
+    });
+
+    it('keeps subquery composite keys as distinct rows', function () {
+      const firstKey = function () {
+        this.select('id').from('accounts').where('name', 'a');
+      };
+      const secondKey = function () {
+        this.select('id').from('accounts').where('name', 'b');
+      };
+      expect(
+        prepareBatch(
+          [
+            { a: firstKey, b: 1, v: 'x' },
+            { a: secondKey, b: 1, v: 'y' },
+          ],
+          ['a', 'b'],
+          'last'
+        ).rows
+      ).to.eql([
+        { a: firstKey, b: 1, v: 'x' },
+        { a: secondKey, b: 1, v: 'y' },
+      ]);
+    });
+
+    it('dedupes equal Date, Buffer and plain object composite keys', function () {
+      expect(
+        prepareBatch(
+          [
+            {
+              at: new Date('2026-01-01T00:00:00Z'),
+              token: Buffer.from('ab'),
+              tag: { a: 1 },
+              v: 'x',
+            },
+            {
+              at: new Date('2026-01-01T00:00:00Z'),
+              token: Buffer.from('ab'),
+              tag: { a: 1 },
+              v: 'y',
+            },
+          ],
+          ['at', 'token', 'tag'],
+          'last'
+        ).rows
+      ).to.eql([
+        {
+          at: new Date('2026-01-01T00:00:00Z'),
+          token: Buffer.from('ab'),
+          tag: { a: 1 },
+          v: 'y',
+        },
+      ]);
+    });
+
+    it('keeps a raw and a plain object composite key apart', function () {
+      const knex = knexLib({ client: 'pg' });
+      const rawKey = knex.raw('?', [1]);
+      expect(
+        prepareBatch(
+          [
+            { a: rawKey, b: 1, v: 'x' },
+            { a: {}, b: 1, v: 'y' },
+          ],
+          ['a', 'b'],
+          'last'
+        ).rows
+      ).to.eql([
+        { a: rawKey, b: 1, v: 'x' },
+        { a: {}, b: 1, v: 'y' },
+      ]);
+    });
+
     it('dedupes equal array keys', function () {
       expect(
         prepareBatch(

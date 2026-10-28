@@ -5,9 +5,11 @@ on:
   push:
     branches:
       - master
+      - hhh-dev
   pull_request:
     branches:
       - master
+      - hhh-dev
 
 permissions:
   contents: read

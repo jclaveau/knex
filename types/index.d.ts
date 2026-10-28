@@ -2661,6 +2661,10 @@ declare namespace Knex {
       columnNames: string | readonly (string | Raw)[],
       indexName?: string
     ): TableBuilder;
+    dropIndexIfExists(
+      columnNames: string | readonly (string | Raw)[],
+      indexName?: string
+    ): TableBuilder;
     dropTimestamps(useCamelCase?: boolean): TableBuilder;
     dropChecks(checkConstraintNames: string | string[]): TableBuilder;
     queryContext(context: any): TableBuilder;

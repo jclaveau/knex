@@ -2,6 +2,7 @@
 'use strict';
 
 const { expect } = require('chai');
+const MariaDB_Client = require('../../../lib/dialects/mariadb');
 const MySQL_Client = require('../../../lib/dialects/mysql');
 const PG_Client = require('../../../lib/dialects/postgres');
 const Redshift_Client = require('../../../lib/dialects/redshift');
@@ -1522,6 +1523,150 @@ describe('QueryBuilder', () => {
         bindings: [1, 2, 3],
       },
     });
+  });
+
+  it('where in past the postgres bind parameter limit binds one array', () => {
+    const ids = Array.from({ length: 65536 }, (_, index) => index + 1);
+    testsql(qb().select('*').from('users').whereIn('id', ids), {
+      pg: {
+        sql: 'select * from "users" where "id" = any(?)',
+        bindings: [ids],
+      },
+      cockroachdb: {
+        sql: 'select * from "users" where "id" = any(?)',
+        bindings: [ids],
+      },
+      'pg-redshift': {
+        sql: `select * from "users" where "id" in (${'?, '.repeat(65535)}?)`,
+        bindings: ids,
+      },
+    });
+  });
+
+  it('where not in past the postgres bind parameter limit binds one array', () => {
+    const ids = Array.from({ length: 65536 }, (_, index) => index + 1);
+    testsql(qb().select('*').from('users').whereNotIn('id', ids), {
+      pg: {
+        sql: 'select * from "users" where "id" <> all(?)',
+        bindings: [ids],
+      },
+    });
+  });
+
+  it('where in at the postgres bind parameter limit keeps its list', () => {
+    const ids = Array.from({ length: 65535 }, (_, index) => index + 1);
+    testsql(qb().select('*').from('users').whereIn('id', ids), {
+      pg: {
+        sql: `select * from "users" where "id" in (${'?, '.repeat(65534)}?)`,
+        bindings: ids,
+      },
+    });
+  });
+
+  it('where in past the postgres bind parameter limit holding a raw keeps its list', () => {
+    const ids = Array.from({ length: 65536 }, (_, index) => index + 1);
+    testsql(
+      qb()
+        .select('*')
+        .from('users')
+        .whereIn('id', [...ids, raw('0')]),
+      {
+        pg: {
+          sql: `select * from "users" where "id" in (${'?, '.repeat(65536)}0)`,
+          bindings: ids,
+        },
+      }
+    );
+  });
+
+  it('where in past the postgres bind parameter limit holding an object keeps its list', () => {
+    const ids = Array.from({ length: 65536 }, (_, index) => index + 1);
+    testsql(
+      qb()
+        .select('*')
+        .from('users')
+        .whereIn('id', [...ids, { a: 1 }]),
+      {
+        pg: {
+          sql: `select * from "users" where "id" in (${'?, '.repeat(65536)}?)`,
+          bindings: [...ids, '{"a":1}'],
+        },
+      }
+    );
+  });
+
+  it('where in past the postgres bind parameter limit binds null, dates and buffers in the array', () => {
+    const values = [
+      null,
+      new Date(0),
+      Buffer.from('a1b2', 'hex'),
+      ...Array.from({ length: 65533 }, (_, index) => index + 1),
+    ];
+    testsql(qb().select('*').from('users').whereIn('id', values), {
+      pg: {
+        sql: 'select * from "users" where "id" = any(?)',
+        bindings: [values],
+      },
+    });
+  });
+
+  it('having in past the postgres bind parameter limit binds one array', () => {
+    const ids = Array.from({ length: 65536 }, (_, index) => index + 1);
+    testsql(
+      qb()
+        .select('id')
+        .from('users')
+        .groupBy('id')
+        .havingIn('id', ids)
+        .orHavingNotIn('id', ids),
+      {
+        pg: {
+          sql: 'select "id" from "users" group by "id" having "id" = any(?) or "id" <> all(?)',
+          bindings: [ids, ids],
+        },
+        cockroachdb: {
+          sql: 'select "id" from "users" group by "id" having "id" = any(?) or "id" <> all(?)',
+          bindings: [ids, ids],
+        },
+        'pg-redshift': {
+          sql: `select "id" from "users" group by "id" having "id" in (${'?, '.repeat(
+            65535
+          )}?) or "id" not in (${'?, '.repeat(65535)}?)`,
+          bindings: [...ids, ...ids],
+        },
+      }
+    );
+  });
+
+  it('on in past the postgres bind parameter limit binds one array', () => {
+    const ids = Array.from({ length: 65536 }, (_, index) => index + 1);
+    testsql(
+      qb()
+        .select('*')
+        .from('users')
+        .join('contacts', (join) => {
+          join
+            .on('users.id', '=', 'contacts.id')
+            .onIn('contacts.id', ids)
+            .orOnNotIn('users.id', ids);
+        }),
+      {
+        pg: {
+          sql: 'select * from "users" inner join "contacts" on "users"."id" = "contacts"."id" and "contacts"."id" = any(?) or "users"."id" <> all(?)',
+          bindings: [ids, ids],
+        },
+        cockroachdb: {
+          sql: 'select * from "users" inner join "contacts" on "users"."id" = "contacts"."id" and "contacts"."id" = any(?) or "users"."id" <> all(?)',
+          bindings: [ids, ids],
+        },
+        'pg-redshift': {
+          sql: `select * from "users" inner join "contacts" on "users"."id" = "contacts"."id" and "contacts"."id" in (${'?, '.repeat(
+            65535
+          )}?) or "users"."id" not in (${'?, '.repeat(65535)}?)`,
+          bindings: [...ids, ...ids],
+        },
+      }
+    );
   });
 
   it('where ins with Buffer values', () => {
@@ -10736,6 +10881,26 @@ describe('QueryBuilder', () => {
     );
   });
 
+  it('escapes strings, dates, buffers and bigints in a postgresql array', () => {
+    testquery(
+      qb()
+        .select('*')
+        .from('sometable')
+        .where('array_field', '&&', [
+          'line\nbreak',
+          "it's",
+          'back\\slash',
+          'say "hi"',
+          new Date(2016, 0, 5, 10, 19, 30, 599),
+          Buffer.from([1, 2]),
+          10n,
+        ]),
+      {
+        pg: String.raw`select * from "sometable" where "array_field" && E'{"line${'\n'}break","it''s","back\\\\slash","say \\"hi\\"","2016-01-05 10:19:30.599","\\\\x0102",10}'`,
+      }
+    );
+  });
+
   it('#2003, properly escapes objects with toPostgres specialization', () => {
     function TestObject() {}
     TestObject.prototype.toPostgres = () => 'foobar';
@@ -10848,7 +11013,13 @@ describe('QueryBuilder', () => {
     };
 
     const mysqlClientForWarnings = new MySQL_Client(
-      Object.assign({ client: 'mysql' }, loggerConfigForTestingWarnings)
+      Object.assign(
+        {
+          client: 'mysql',
+          version: '8.0.26',
+        },
+        loggerConfigForTestingWarnings
+      )
     );
 
     expect(() => {
@@ -10865,6 +11036,126 @@ describe('QueryBuilder', () => {
         }
       );
     }).to.throw(Error);
+  });
+
+  const mariaClientForVersion = (version) => {
+    const warnings = [];
+    const client = new MariaDB_Client({
+      client: 'mariadb',
+      version,
+      log: { warn: (message) => warnings.push(message) },
+    });
+    return { client, warnings };
+  };
+
+  it('should warn to user when use `.returning()` on insert in MariaDB < 10.5.0', () => {
+    const { client, warnings } = mariaClientForVersion('10.4.1');
+    testsql(
+      qb().into('users').insert({ email: 'foo' }).returning('id'),
+      {
+        mariadb: {
+          sql: 'insert into `users` (`email`) values (?)',
+          bindings: ['foo'],
+        },
+      },
+      { mariadb: client }
+    );
+    expect(warnings).to.eql([
+      '.returning() is not supported for mariadb versions older than 10.5 and will not have any effect.',
+    ]);
+  });
+
+  it('should compile `.returning()` on insert/delete in MariaDB >= 10.5.0 without warning', () => {
+    {
+      const { client, warnings } = mariaClientForVersion('10.6.3');
+      testsql(
+        qb().into('users').insert({ email: 'foo' }).returning('id'),
+        {
+          mariadb: {
+            sql: 'insert into `users` (`email`) values (?) returning `id`',
+            bindings: ['foo'],
+          },
+        },
+        { mariadb: client }
+      );
+      expect(warnings).to.eql([]);
+    }
+
+    {
+      const { client, warnings } = mariaClientForVersion('10.5.0');
+      testsql(
+        qb().from('users').where('id', 1).del().returning(['id', 'email']),
+        {
+          mariadb: {
+            sql: 'delete from `users` where `id` = ? returning `id`, `email`',
+            bindings: [1],
+          },
+        },
+        { mariadb: client }
+      );
+      expect(warnings).to.eql([]);
+    }
+  });
+
+  it('should compile `.returning()` on single-table update in MariaDB >= 13.0', () => {
+    const { client, warnings } = mariaClientForVersion('13.0.0');
+    testsql(
+      qb()
+        .from('users')
+        .where('id', 1)
+        .update({ email: 'foo' })
+        .returning('id'),
+      {
+        mariadb: {
+          sql: 'update `users` set `email` = ? where `id` = ? returning `id`',
+          bindings: ['foo', 1],
+        },
+      },
+      { mariadb: client }
+    );
+    expect(warnings).to.eql([]);
+  });
+
+  it('should warn and skip `.returning()` on update in MariaDB < 13.0', () => {
+    const { client, warnings } = mariaClientForVersion('12.0.0');
+    testsql(
+      qb()
+        .from('users')
+        .where('id', 1)
+        .update({ email: 'foo' })
+        .returning('id'),
+      {
+        mariadb: {
+          sql: 'update `users` set `email` = ? where `id` = ?',
+          bindings: ['foo', 1],
+        },
+      },
+      { mariadb: client }
+    );
+    expect(warnings).to.eql([
+      '.returning() is not supported for mariadb versions older than 13.0 and will not have any effect.',
+    ]);
+  });
+
+  it('should warn and skip `.returning()` on multi-table update in MariaDB >= 13.0', () => {
+    const { client, warnings } = mariaClientForVersion('13.0.0');
+    testsql(
+      qb()
+        .from('users')
+        .join('accounts', 'users.id', 'accounts.user_id')
+        .update({ 'users.email': 'foo' })
+        .returning('users.id'),
+      {
+        mariadb: {
+          sql: 'update `users` inner join `accounts` on `users`.`id` = `accounts`.`user_id` set `users`.`email` = ?',
+          bindings: ['foo'],
+        },
+      },
+      { mariadb: client }
+    );
+    expect(warnings).to.eql([
+      '.returning() is not supported for multi-table update statements and will not have any effect.',
+    ]);
   });
 
   it('join with subquery using .withSchema', () => {

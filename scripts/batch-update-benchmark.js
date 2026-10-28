@@ -147,7 +147,7 @@ function chunksNeeded(knex, columns, rows, mode) {
   // structural per-statement row cap (e.g. SQLite's compound-SELECT limit).
   const maxRows = Math.min(
     Math.max(1, Math.floor(limit / perRow)),
-    knex.client.batchUpdateRowLimit(mode)
+    knex.client.batchUpdateRowLimit(mode, 1, columns.length)
   );
   return Math.ceil(rows.length / maxRows);
 }
@@ -278,6 +278,86 @@ async function benchBlobs(knex) {
   await knex.schema.dropTableIfExists('bench_blobs');
 }
 
+// Picks SQLite's row cap for a 'case' chunk (Client_SQLite3#batchUpdateRowLimit).
+// SQLite walks each column's CASE list for every row it updates, so a statement
+// costs about rows × columns × chunk and a smaller chunk is cheaper until the
+// per-statement overhead takes over. Times every cap on each key × column shape
+// as the median CPU ms of CASE_CHUNK_RUNS runs (SQLite runs in-process, so the
+// process CPU time covers the engine too).
+const CASE_CHUNK_CAPS = [1, 2, 5, 10, 20, 50, 100];
+const CASE_CHUNK_ROWS = 2000;
+const CASE_CHUNK_RUNS = 5;
+
+async function benchCaseChunkSize(knex) {
+  if (knex.client.dialect !== 'sqlite3') {
+    return;
+  }
+  console.log(
+    `\n## SQLite case chunk size (${CASE_CHUNK_ROWS} rows, median CPU ms of ${CASE_CHUNK_RUNS} runs)\n`
+  );
+  console.log(`| keys | cols | ${CASE_CHUNK_CAPS.join(' | ')} | shipped cap |`);
+  console.log(`|---:|---:|${CASE_CHUNK_CAPS.map(() => '---:|').join('')}---:|`);
+  for (const keyCount of [1, 2, 3]) {
+    for (const colCount of [1, 3, 10, 20]) {
+      const keyColumns = Array.from({ length: keyCount }, (_, i) => `k${i}`);
+      const columns = Array.from({ length: colCount }, (_, i) => `c${i}`);
+      await knex.schema.dropTableIfExists('bench_case');
+      await knex.schema.createTable('bench_case', (table) => {
+        for (const column of keyColumns) {
+          table.integer(column);
+        }
+        for (const column of columns) {
+          table.string(column);
+        }
+        table.primary(keyColumns);
+      });
+      const buildRows = (label) =>
+        Array.from({ length: CASE_CHUNK_ROWS }, (_, id) => {
+          const row = {};
+          for (const [index, column] of keyColumns.entries()) {
+            row[column] = index === 0 ? id : 1;
+          }
+          for (const column of columns) {
+            row[column] = `${column}-${label}-${id}`;
+          }
+          return row;
+        });
+      await knex.batchInsert(
+        'bench_case',
+        buildRows('seed'),
+        Math.floor(500 / (keyCount + colCount))
+      );
+      const shippedCap = knex.client.batchUpdateRowLimit(
+        'case',
+        keyCount,
+        colCount
+      );
+      const cells = [];
+      for (const cap of CASE_CHUNK_CAPS) {
+        knex.client.batchUpdateRowLimit = () => cap;
+        const samples = [];
+        for (let run = 0; run < CASE_CHUNK_RUNS; run++) {
+          const updates = buildRows(`${cap}-${run}`);
+          const cpuStart = process.cpuUsage();
+          await knex.batchUpdate('bench_case', updates, keyColumns, {
+            mode: 'case',
+            chunkSize: CASE_CHUNK_ROWS,
+          });
+          const cpu = process.cpuUsage(cpuStart);
+          samples.push((cpu.user + cpu.system) / 1000);
+        }
+        delete knex.client.batchUpdateRowLimit;
+        samples.sort((a, b) => a - b);
+        cells.push(samples[Math.floor(samples.length / 2)].toFixed(0));
+      }
+      console.log(
+        `| ${keyCount} | ${colCount} | ${cells.join(' | ')} | ${shippedCap} |`
+      );
+    }
+  }
+  await knex.schema.dropTableIfExists('bench_case');
+}
+
 async function run() {
   const dialect = (process.env.DB || process.argv[2] || 'sqlite3').match(
     /[\w-]+/g
@@ -343,6 +423,7 @@ async function run() {
   printResultsJson(dialect, results);
   await benchColumnTypes(knex);
   await benchBlobs(knex);
+  await benchCaseChunkSize(knex);
 
   await knex.destroy();
 }

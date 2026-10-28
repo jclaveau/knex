@@ -1472,12 +1472,12 @@ describe('Updates', function () {
           expect(Number(updated.c)).to.equal(600);
         });
 
-        it("splits a composite-key case batch under SQLite's expression depth", async function () {
-          // A composite key's case WHERE is one OR term per row, an expression
-          // as deep as the chunk is long; SQLite caps that depth at 1000. Without
-          // the row cap the default 1000-row chunk fails ("Expression tree is
-          // too large (maximum depth 1000)"); with it, 1100 rows split into
-          // ceil(1100 / 500) = 3.
+        it('splits a composite-key case batch into 50-row chunks on SQLite', async function () {
+          // One updated column takes the whole 50-branch case budget, so 1100
+          // rows run as ceil(1100 / 50) = 22 statements. A chunk that long also
+          // keeps the OR-joined WHERE under SQLite's expression depth: the
+          // default 1000-row chunk fails ("Expression tree is too large
+          // (maximum depth 1000)").
           if (!isSQLite(knex)) {
             return this.skip();
           }
@@ -1505,7 +1505,7 @@ describe('Updates', function () {
             knex.off('query', onQuery);
           }
 
-          expect(statements).to.have.lengthOf(3);
+          expect(statements).to.have.lengthOf(22);
           const updated = await knex('members')
             .where('name', 'deep')
             .count({ c: 'id' })
@@ -1513,9 +1513,9 @@ describe('Updates', function () {
           expect(Number(updated.c)).to.equal(1100);
         });
 
-        it('keeps a single-key case batch in 1000-row chunks on SQLite', async function () {
-          // A single key's case WHERE is a flat IN list, under no depth cap, so
-          // only chunkSize splits it: 1100 rows run as 1000 + 100.
+        it('sizes a single-key case chunk by its column count on SQLite', async function () {
+          // name and age share the 50-branch case budget, 25 rows each, so
+          // 1100 rows run as 1100 / 25 = 44 statements.
           if (!isSQLite(knex)) {
             return this.skip();
           }
@@ -1543,12 +1543,72 @@ describe('Updates', function () {
             knex.off('query', onQuery);
           }
 
-          expect(statements).to.have.lengthOf(2);
+          expect(statements).to.have.lengthOf(44);
           const updated = await knex('members')
             .where('name', 'flat')
             .count({ c: 'id' })
             .first();
           expect(Number(updated.c)).to.equal(1100);
+        });
+
+        it('runs a case batch fastest at the shipped SQLite chunk', async function () {
+          // Pins the measurement behind CASE_BRANCH_BUDGET
+          // (scripts/batch-update-benchmark.md#sqlite-case-chunk-size): for 2 keys
+          // × 10 columns the shipped 5-row chunk beats both a 1-row and a 50-row
+          // chunk in CPU time. If a SQLite release changes how it evaluates CASE,
+          // this fails: re-run the benchmark and move the budget.
+          if (!isSQLite(knex)) {
+            return this.skip();
+          }
+          const columns = Array.from({ length: 10 }, (_, i) => `c${i}`);
+          await knex.schema.dropTableIfExists('case_chunk_timing');
+          await knex.schema.createTable('case_chunk_timing', (table) => {
+            table.integer('k0');
+            table.integer('k1');
+            for (const column of columns) {
+              table.string(column);
+            }
+            table.primary(['k0', 'k1']);
+          });
+          const buildRows = (label) =>
+            Array.from({ length: 1000 }, (_, id) => ({
+              k0: id,
+              k1: 1,
+              ...Object.fromEntries(columns.map((c) => [c, `${label}-${id}`])),
+            }));
+          await knex.batchInsert('case_chunk_timing', buildRows('seed'), 40);
+          expect(knex.client.batchUpdateRowLimit('case', 2, 10)).to.equal(5);
+          const medianCpuMs = async (cap) => {
+            knex.client.batchUpdateRowLimit = () => cap;
+            const samples = [];
+            try {
+              for (let run = 0; run < 5; run++) {
+                const updates = buildRows(`${cap}-${run}`);
+                const cpuStart = process.cpuUsage();
+                await knex.batchUpdate(
+                  'case_chunk_timing',
+                  updates,
+                  ['k0', 'k1'],
+                  {
+                    mode: 'case',
+                  }
+                );
+                const cpu = process.cpuUsage(cpuStart);
+                samples.push(cpu.user + cpu.system);
+              }
+            } finally {
+              delete knex.client.batchUpdateRowLimit;
+            }
+            return samples.sort((a, b) => a - b)[2] / 1000;
+          };
+
+          const oneRowMs = await medianCpuMs(1);
+          const shippedMs = await medianCpuMs(5);
+          const fiftyRowMs = await medianCpuMs(50);
+          await knex.schema.dropTableIfExists('case_chunk_timing');
+
+          expect(shippedMs).to.be.below(oneRowMs);
+          expect(shippedMs).to.be.below(fiftyRowMs);
         });
 
         // Large-batch correctness for every mode. These sizes cross each

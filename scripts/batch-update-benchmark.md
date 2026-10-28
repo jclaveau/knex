@@ -146,3 +146,36 @@ reports the bare `ARRAY`), so array columns may need the explicit object.
   statement) but warn against it for wide tables.
 - Before any of these is safe at large `chunkSize`, the chunker needs the
   compound-select / expression-depth caps noted above.
+
+## SQLite case chunk size
+
+`Client_SQLite3#batchUpdateRowLimit` caps a `'case'` chunk at
+`floor(CASE_BRANCH_BUDGET / columns)` rows (at least 1), with
+`CASE_BRANCH_BUDGET = 50`. SQLite walks each column's CASE list for every row it
+updates, so a statement costs about rows × columns × chunk: the chunk that runs
+fastest holds about 50 branches (rows × columns), whatever the key. The knex
+compile cost is flat (~100 ms per 2000 rows at every chunk size); the rest is
+SQLite's evaluation. A cap that small also keeps a composite key's OR-joined
+WHERE, rows + keys + 1 deep, under `SQLITE_MAX_EXPR_DEPTH` (1000).
+
+`benchCaseChunkSize` in `batch-update-benchmark.js` prints this table
+(`DB=sqlite3`, `:memory:`, 2000 rows, median process CPU ms of 5 runs; column
+headers are the forced row cap). The integration test "runs a case batch
+fastest at the shipped SQLite chunk" pins the 2 keys × 10 columns row (shipped
+5 beats 1 and 50), so a SQLite release that changes this fails CI: re-run the
+sweep and move the budget.
+
+| keys | cols |    1 |    2 |    5 |   10 |   20 |   50 |   100 | shipped cap |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ----: | ----------: |
+|    1 |    1 |  262 |  125 |   70 |   37 |   33 |   28 |    22 |          50 |
+|    1 |    3 |  291 |  133 |   78 |   77 |   73 |   57 |    64 |          16 |
+|    1 |   10 |  355 |  241 |  193 |  223 |  194 |  251 |   418 |           5 |
+|    1 |   20 |  577 |  411 |  361 |  412 |  480 |  826 |  1521 |           2 |
+|    2 |    1 |  259 |  148 |   81 |   69 |   78 |   95 |    53 |          50 |
+|    2 |    3 |  285 |  201 |  156 |  142 |  120 |  197 |   211 |          16 |
+|    2 |   10 |  491 |  394 |  382 |  374 |  504 |  843 |  1433 |           5 |
+|    2 |   20 |  861 |  857 |  726 |  926 | 1558 | 3052 |  5416 |           2 |
+|    3 |    1 |  221 |  151 |  103 |  142 |   85 |   86 |    87 |          50 |
+|    3 |    3 |  312 |  230 |  196 |  174 |  176 |  247 |   335 |          16 |
+|    3 |   10 |  671 |  533 |  483 |  692 |  876 | 1622 |  3122 |           5 |
+|    3 |   20 | 1046 | 1087 | 1332 | 1754 | 2793 | 6322 | 11894 |           2 |

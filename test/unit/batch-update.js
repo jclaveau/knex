@@ -229,7 +229,7 @@ describe('batchUpdate (db-less)', function () {
     );
   });
 
-  it('leaves a raw first-row cell uncast in union mode (postgres)', function () {
+  it('casts a raw first-row cell whole in union mode (postgres)', function () {
     const knex = clients['pg'];
     expect(
       knex('users')
@@ -244,8 +244,113 @@ describe('batchUpdate (db-less)', function () {
         .toSQL()
         .toNative()
     ).to.eql({
-      sql: 'update "users" set "age" = "v"."age", "seen" = "v"."seen" from (select $1::bigint as "id", 40 + 2 as "age", CURRENT_TIMESTAMP as "seen" union all select $2, $3, $4) as "v" where "users"."id" = "v"."id"',
+      sql: 'update "users" set "age" = "v"."age", "seen" = "v"."seen" from (select $1::bigint as "id", (40 + 2)::bigint as "age", (CURRENT_TIMESTAMP)::timestamptz as "seen" union all select $2, $3, $4) as "v" where "users"."id" = "v"."id"',
       bindings: [1, 2, 3, new Date(0)],
+    });
+  });
+
+  it('types a raw cell from the bound values of later rows (postgres)', function () {
+    const knex = clients['pg'];
+    expect(
+      knex('users')
+        .batchUpdate(
+          [
+            { id: 1, n: knex.raw('1 + 1') },
+            { id: 2, n: 1.5 },
+          ],
+          ['id'],
+          ['n']
+        )
+        .toSQL()
+        .toNative()
+    ).to.eql({
+      sql: 'update "users" set "n" = "v"."n" from (select $1::bigint as "id", (1 + 1)::numeric as "n" union all select $2, $3) as "v" where "users"."id" = "v"."id"',
+      bindings: [1, 2, 1.5],
+    });
+  });
+
+  it('casts a raw cell in a later row (postgres)', function () {
+    const knex = clients['pg'];
+    expect(
+      knex('users')
+        .batchUpdate(
+          [
+            { id: 1, s: 'a' },
+            { id: 2, s: knex.raw('now()') },
+          ],
+          ['id'],
+          ['s']
+        )
+        .toSQL()
+        .toNative()
+    ).to.eql({
+      sql: 'update "users" set "s" = "v"."s" from (select $1::bigint as "id", $2::text as "s" union all select $3, (now())::text) as "v" where "users"."id" = "v"."id"',
+      bindings: [1, 'a', 2],
+    });
+  });
+
+  it('casts a raw cell to its columnTypes entry (postgres)', function () {
+    const knex = clients['pg'];
+    expect(
+      knex('users')
+        .batchUpdate(
+          [
+            { id: 1, i: knex.raw("'4'") },
+            { id: 2, i: 5 },
+          ],
+          ['id'],
+          ['i'],
+          { i: 'integer' }
+        )
+        .toSQL()
+        .toNative()
+    ).to.eql({
+      sql: 'update "users" set "i" = "v"."i" from (select $1::bigint as "id", (\'4\')::integer as "i" union all select $2, $3) as "v" where "users"."id" = "v"."id"',
+      bindings: [1, 2, 5],
+    });
+  });
+
+  it('leaves a column of raw cells and nulls uncast (postgres)', function () {
+    const knex = clients['pg'];
+    expect(
+      knex('users')
+        .batchUpdate(
+          [
+            { id: 1, s: knex.raw('now()') },
+            { id: 2, s: null },
+          ],
+          ['id'],
+          ['s']
+        )
+        .toSQL()
+        .toNative()
+    ).to.eql({
+      sql: 'update "users" set "s" = "v"."s" from (select $1::bigint as "id", now() as "s" union all select $2, $3) as "v" where "users"."id" = "v"."id"',
+      bindings: [1, 2, null],
+    });
+  });
+
+  it('compiles a function value as a cast subquery (postgres)', function () {
+    expect(
+      clients['pg']('users')
+        .batchUpdate(
+          [
+            {
+              id: 1,
+              name: function () {
+                this.select('x').from('y');
+              },
+            },
+            { id: 2, name: 'b' },
+          ],
+          ['id'],
+          ['name']
+        )
+        .toSQL()
+        .toNative()
+    ).to.eql({
+      sql: 'update "users" set "name" = "v"."name" from (select $1::bigint as "id", ((select "x" from "y"))::text as "name" union all select $2, $3) as "v" where "users"."id" = "v"."id"',
+      bindings: [1, 2, 'b'],
     });
   });
 
@@ -743,7 +848,9 @@ describe('batchUpdate (db-less)', function () {
     });
 
     it('rejects an aliased table', function () {
-      expect(() => clients['pg'].batchUpdate('users as u', rows))
+      expect(() =>
+        clients['pg'].batchUpdate('users as u', [{ id: 1, name: 'a' }])
+      )
         .to.throw(TypeError)
         .with.property(
           'message',
@@ -753,7 +860,7 @@ describe('batchUpdate (db-less)', function () {
 
     it('rejects a raw table', function () {
       const knex = clients['pg'];
-      expect(() => knex.batchUpdate(knex.raw('users'), rows))
+      expect(() => knex.batchUpdate(knex.raw('users'), [{ id: 1, name: 'a' }]))
         .to.throw(TypeError)
         .with.property(
           'message',
@@ -771,7 +878,30 @@ describe('batchUpdate (db-less)', function () {
         .to.throw(TypeError)
         .with.property(
           'message',
-          "Invalid batch: seen holds a raw value; 'json' mode can't carry SQL, use mode 'case'"
+          "Invalid batch: seen holds a raw value or a subquery; 'json' mode can't carry SQL, use mode 'case'"
+        );
+    });
+
+    it("rejects a function value in 'json' mode", function () {
+      expect(() =>
+        clients['pg'].batchUpdate(
+          'users',
+          [
+            {
+              id: 1,
+              name: function () {
+                this.select('x').from('y');
+              },
+            },
+          ],
+          'id',
+          { mode: 'json' }
+        )
+      )
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          "Invalid batch: name holds a raw value or a subquery; 'json' mode can't carry SQL, use mode 'case'"
         );
     });
 
@@ -788,7 +918,7 @@ describe('batchUpdate (db-less)', function () {
         .to.throw(TypeError)
         .with.property(
           'message',
-          "Invalid batch: age holds a raw value; 'json' mode can't carry SQL, use mode 'case'"
+          "Invalid batch: age holds a raw value or a subquery; 'json' mode can't carry SQL, use mode 'case'"
         );
     });
 
@@ -950,6 +1080,7 @@ describe('batchUpdate (db-less)', function () {
           id: 'integer',
           mood: 'USER-DEFINED',
         }),
+        customWrapIdentifier: (value) => value,
       };
       let error;
       try {
@@ -965,9 +1096,30 @@ describe('batchUpdate (db-less)', function () {
       );
     });
 
+    it("reads 'from_db' types under the wrapIdentifier column name", async function () {
+      const dialectClient = {
+        batchUpdateColumnTypesFromDb: async () => ({
+          user_id: '"pg_catalog"."int4"',
+          display_name: '"pg_catalog"."text"',
+        }),
+        customWrapIdentifier: (value) =>
+          ({ userId: 'user_id', displayName: 'display_name' }[value]),
+      };
+      expect(
+        await resolveColumnTypesFromDb(dialectClient, null, 'users', [
+          'userId',
+          'displayName',
+        ])
+      ).to.eql({
+        userId: '"pg_catalog"."int4"',
+        displayName: '"pg_catalog"."text"',
+      });
+    });
+
     it("throws when 'from_db' finds no type for a column", async function () {
       const dialectClient = {
         batchUpdateColumnTypesFromDb: async () => ({ id: 'integer' }),
+        customWrapIdentifier: (value) => value,
       };
       let error;
       try {

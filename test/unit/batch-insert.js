@@ -63,4 +63,64 @@ describe('batchInsert (db-less)', function () {
     );
     expect(chunkLengths).to.eql([1049, 951]);
   });
+
+  it('counts an oracledb returning column as one more parameter per row', async function () {
+    const chunkLengths = [];
+    await batchInsert(
+      {
+        client: knexLib({ client: 'oracledb' }).client,
+        transaction: (callback) =>
+          callback(() => ({
+            insert: (rows) => chunkLengths.push(rows.length),
+          })),
+      },
+      'users',
+      Array.from({ length: 1000 }, () =>
+        Object.fromEntries(
+          Array.from({ length: 65 }, (_, index) => [`c${index}`, index])
+        )
+      ),
+      1000
+    ).returning('id');
+    expect(chunkLengths).to.eql([992, 8]);
+  });
+
+  it('counts an oracledb Buffer column as one more parameter per row', async function () {
+    const chunkLengths = [];
+    await batchInsert(
+      {
+        client: knexLib({ client: 'oracledb' }).client,
+        transaction: (callback) =>
+          callback(() => ({
+            insert: (rows) => chunkLengths.push(rows.length),
+          })),
+      },
+      'users',
+      Array.from({ length: 1000 }, () => ({
+        ...Object.fromEntries(
+          Array.from({ length: 64 }, (_, index) => [`c${index}`, index])
+        ),
+        blob: Buffer.from('x'),
+      })),
+      1000
+    );
+    expect(chunkLengths).to.eql([992, 8]);
+  });
+
+  it('rejects a null row by its index', async function () {
+    const chunkLengths = [];
+    const error = await batchInsert(
+      {
+        client: knexLib({ client: 'pg' }).client,
+        transaction: (callback) =>
+          callback(() => ({
+            insert: (rows) => chunkLengths.push(rows.length),
+          })),
+      },
+      'users',
+      [{ a: 1 }, null, { a: 2 }]
+    ).catch((error) => error);
+    expect(error.message).to.equal('Invalid batchInsert row 1: null');
+    expect(chunkLengths).to.eql([]);
+  });
 });

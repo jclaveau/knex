@@ -12,7 +12,7 @@ It's primarily designed to be used when you have thousands of rows to insert int
 
 By default, the `chunkSize` is set to 1000.
 
-A chunk also stays under the dialect's bind parameter cap (65535 on PostgreSQL, 2098 on MSSQL), counting one parameter per distinct key across the whole batch: 1000 rows of 70 keys insert in chunks of 936 and 64 rows on PostgreSQL.
+A chunk also stays under the dialect's bind parameter cap (65535 on PostgreSQL, 2098 on MSSQL), counting one parameter per distinct key across the whole batch: 1000 rows of 70 keys insert in chunks of 936 and 64 rows on PostgreSQL. On Oracle each returning column and each `Buffer` column counts one more. A raw or subquery cell that binds values of its own can still overflow the cap: lower `chunkSize` for those. A `null` or non-object row rejects: `Invalid batchInsert row 1: null`.
 
 BatchInsert also allows for [returning values](/guide/query-builder#returning) and supplying transactions using [transacting](/guide/query-builder#transacting).
 

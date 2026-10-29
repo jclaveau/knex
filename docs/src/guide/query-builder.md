@@ -1982,7 +1982,7 @@ knex('accounts').where('id', 'not in', subquery);
 **.whereIn(column|columns, array|callback|builder, [options])**
 **.orWhereIn**
 
-Shorthand for .where('id', 'in', obj), the .whereIn and .orWhereIn methods add a "where in" clause to the query. Note that passing empty array as the value results in a query that never returns any rows (`WHERE 1 = 0`). A `Set` or any other iterable spreads into its values, like an array.
+Shorthand for .where('id', 'in', obj), the .whereIn and .orWhereIn methods add a "where in" clause to the query. Note that passing empty array as the value results in a query that never returns any rows (`WHERE 1 = 0`)
 
 ```js
 // @sql

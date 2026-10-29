@@ -1982,42 +1982,6 @@ describe('QueryBuilder', () => {
     );
   });
 
-  it('where in, having in and on in spread a Set into its values', () => {
-    testsql(
-      qb()
-        .select('users.id')
-        .from('users')
-        .join('contacts', (join) => {
-          join.onIn('contacts.id', new Set([1, 2]));
-        })
-        .whereIn('users.id', new Set([3, 4]))
-        .whereNotIn('users.id', new Set())
-        .groupBy('users.id')
-        .havingIn('users.id', new Set([5, 6])),
-      {
-        pg: {
-          sql: 'select "users"."id" from "users" inner join "contacts" on "contacts"."id" in (?, ?) where "users"."id" in (?, ?) and 1 = ? group by "users"."id" having "users"."id" in (?, ?)',
-          bindings: [1, 2, 3, 4, 1, 5, 6],
-        },
-      }
-    );
-  });
-
-  it('where in binds a Set past arrayParameterThreshold as one array parameter', () => {
-    testsql(
-      qb()
-        .select('*')
-        .from('users')
-        .whereIn('id', new Set([1, 2, 3]), { arrayParameterThreshold: 2 }),
-      {
-        pg: {
-          sql: 'select * from "users" where "id" = any(?)',
-          bindings: [[1, 2, 3]],
-        },
-      }
-    );
-  });
-
   it('a refused orWhereNotIn option leaves no not or or flag for the next where', () => {
     const builder = qb().select('*').from('users').where('a', 1);
     expect(() => {

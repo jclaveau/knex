@@ -1226,6 +1226,29 @@ describe('batchUpdate (db-less)', function () {
         'numeric(10, 2)',
         'timestamp(3) with time zone',
         '"public"."mood"[]',
+    it('rejects a type name followed by SQL', function () {
+      expect(() =>
+        clients['pg'].batchUpdate('users', rows, 'id', {
+          columnTypes: { name: 'boolean or true' },
+        })
+      )
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          'Invalid columnTypes.name: "boolean or true" is not a valid type name'
+        );
+      expect(() =>
+        clients['pg'].batchUpdate('users', rows, 'id', {
+          columnTypes: { name: 'text as id from users union all select 1' },
+        })
+      )
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          'Invalid columnTypes.name: "text as id from users union all select 1" is not a valid type name'
+        );
+    });
+
       ]) {
         const { sql } = clients['pg']('users')
           .batchUpdate(rows, ['id'], ['name', 'age'], { name: type })
@@ -1245,6 +1268,11 @@ describe('batchUpdate (db-less)', function () {
       let error;
       try {
         await resolveColumnTypesFromDb(dialectClient, null, 'users', [
+        'time without time zone',
+        'double precision',
+        'character varying(255)',
+        'interval day to second(3)',
+        'bigint unsigned zerofill',
           'id',
           'mood',
         ]);

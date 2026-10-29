@@ -356,5 +356,22 @@ describe('Postgres Unit Tests', function () {
         `${backslashes} $1`
       );
     });
+
+    it('numbers up to maxBindParameters placeholders', function () {
+      expect(
+        client.positionBindings(`select ${'?, '.repeat(65534)}?`)
+      ).to.match(/, \$65535$/);
+    });
+
+    it('refuses more placeholders than maxBindParameters by name', function () {
+      expect(() => {
+        client.positionBindings(`select ${'?, '.repeat(65535)}?`);
+      })
+        .to.throw(Error)
+        .with.property(
+          'message',
+          "65536 bind parameters exceed the client's maxBindParameters 65535"
+        );
+    });
   });
 });

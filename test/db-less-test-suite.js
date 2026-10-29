@@ -23,6 +23,7 @@ describe('Query Building Tests', function () {
   require('./unit/query/formatter');
   require('./unit/query/string');
   require('./unit/batch-update');
+  require('./unit/batch-insert');
   require('./unit/schema-builder/mysql')('mysql');
   require('./unit/schema-builder/mysql')('mysql2');
   require('./unit/schema-builder/mysql')('mariadb');

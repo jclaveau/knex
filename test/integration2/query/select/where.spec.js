@@ -463,6 +463,22 @@ describe('Where', function () {
         }
       });
 
+      it('refuses a statement past 65535 bind parameters by name', async function () {
+        if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+          return this.skip();
+        }
+        const error = await knex('accounts')
+          .whereIn(
+            'id',
+            Array.from({ length: 65536 }, (_, index) => index),
+            { arrayParameterThreshold: -1 }
+          )
+          .catch((error) => error);
+        expect(error.message).to.equal(
+          "65536 bind parameters exceed the client's maxBindParameters 65535"
+        );
+      });
+
       it('handles "where in" raw cases', async () => {
         await knex('accounts')
           // COALESCE() is used here simply to generate a valid left-hand-side

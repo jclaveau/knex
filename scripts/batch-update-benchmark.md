@@ -163,35 +163,38 @@ reports the bare `ARRAY`), so array columns may need the explicit object.
 `Client_SQLite3#batchUpdateRowLimit` caps a `'case'` chunk at
 `floor(CASE_BRANCH_BUDGET / columns)` rows (at least 1), with
 `CASE_BRANCH_BUDGET = 50`. SQLite walks each column's CASE list for every row it
-updates, so a statement costs about rows × columns × chunk: from 10 columns up
-the chunk that runs fastest holds about 50 branches (rows × columns), whatever
-the key; on 1 to 3 columns the timings are close and the best chunk lies
-between 10 and 100 rows. The knex
+updates, so a statement costs about rows × columns × chunk and a wide row wants a
+short chunk: from 10 columns up the fastest chunk holds 10 to 100 branches
+(rows × columns), 1 to 5 rows at 10 columns and 2 to 5 at 20. Which of those
+wins moves between runs (2 keys × 10 columns: 5 rows in an earlier sweep, 1 row
+in this one, 903 vs 1156 ms CPU), so the budget stays at 50. On 1 to 3 columns
+the timings are close and the best chunk lies between 10 and 50 rows. The knex
 compile cost is flat (~100 ms per 2000 rows at every chunk size); the rest is
 SQLite's evaluation. A cap that small also keeps a composite key's OR-joined
 WHERE, rows + keys + 1 deep, under `SQLITE_MAX_EXPR_DEPTH` (1000).
 
 `benchCaseChunkSize` in `batch-update-benchmark.js` prints this table
-(`DB=sqlite3`, `:memory:`, 2000 rows, median process CPU ms of 5 runs; column
+(`DB=sqlite3`, `:memory:`, 2000 rows, median process CPU ms of 5 runs, each cap
+on a freshly seeded table after one discarded run, on a 2-core i3-4005U; column
 headers are the forced row cap). The integration test "runs a case batch
 fastest at the shipped SQLite chunk" pins the 2 keys × 10 columns row (shipped
-5 beats 1 and 50), so a SQLite release that changes this fails CI: re-run the
-sweep and move the budget.
+5 beats 50), so a SQLite release that changes this fails CI: re-run the sweep
+and move the budget.
 
 | keys | cols |    1 |    2 |    5 |   10 |   20 |   50 |   100 | shipped cap |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ----: | ----------: |
-|    1 |    1 |  262 |  125 |   70 |   37 |   33 |   28 |    22 |          50 |
-|    1 |    3 |  291 |  133 |   78 |   77 |   73 |   57 |    64 |          16 |
-|    1 |   10 |  355 |  241 |  193 |  223 |  194 |  251 |   418 |           5 |
-|    1 |   20 |  577 |  411 |  361 |  412 |  480 |  826 |  1521 |           2 |
-|    2 |    1 |  259 |  148 |   81 |   69 |   78 |   95 |    53 |          50 |
-|    2 |    3 |  285 |  201 |  156 |  142 |  120 |  197 |   211 |          16 |
-|    2 |   10 |  491 |  394 |  382 |  374 |  504 |  843 |  1433 |           5 |
-|    2 |   20 |  861 |  857 |  726 |  926 | 1558 | 3052 |  5416 |           2 |
-|    3 |    1 |  221 |  151 |  103 |  142 |   85 |   86 |    87 |          50 |
-|    3 |    3 |  312 |  230 |  196 |  174 |  176 |  247 |   335 |          16 |
-|    3 |   10 |  671 |  533 |  483 |  692 |  876 | 1622 |  3122 |           5 |
-|    3 |   20 | 1046 | 1087 | 1332 | 1754 | 2793 | 6322 | 11894 |           2 |
+|    1 |    1 |  403 |  317 |  100 |   74 |   56 |   48 |    65 |          50 |
+|    1 |    3 |  421 |  302 |  131 |  107 |  149 |  194 |   216 |          16 |
+|    1 |   10 |  541 |  451 |  633 |  662 |  664 |  731 |   746 |           5 |
+|    1 |   20 | 1356 | 1451 | 1294 | 1400 | 1548 | 1444 |  2457 |           2 |
+|    2 |    1 |  381 |  359 |  271 |  254 |  210 |  173 |   211 |          50 |
+|    2 |    3 |  491 |  469 |  525 |  438 |  396 |  484 |   616 |          16 |
+|    2 |   10 |  903 | 1453 | 1156 | 1251 | 1472 | 2067 |  2365 |           5 |
+|    2 |   20 | 2811 | 2544 | 2405 | 2789 | 3041 | 4716 |  8722 |           2 |
+|    3 |    1 |  435 |  498 |  407 |  338 |  287 |  254 |   281 |          50 |
+|    3 |    3 |  545 |  692 |  672 |  662 |  634 |  741 |   633 |          16 |
+|    3 |   10 | 2011 | 1904 | 1614 | 1914 | 2068 | 2755 |  4923 |           5 |
+|    3 |   20 | 3589 | 3396 | 3675 | 3456 | 4848 | 9741 | 18822 |           2 |
 
 ## PostgreSQL case chunk size
 

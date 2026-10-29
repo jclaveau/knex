@@ -630,7 +630,7 @@ const knex = require('knex')({
 
 ### arrayParameterThreshold
 
-Utilized by PostgreSQL and CockroachDB. The longest `whereIn` / `havingIn` / `onIn` list compiled as `in (?, …)` (default 1000); a longer one binds as one array parameter (`= any($1)`). `-1` never binds one array. A call's own `arrayParameterThreshold` option wins over this one. See [whereIn](/guide/query-builder#wherein).
+Utilized by PostgreSQL and CockroachDB. The longest `whereIn` / `havingIn` / `onIn` list compiled as `in (?, …)` (default 1000); a longer one binds as one array parameter (`= any($1)`). `-1` never binds one array. A call's own `arrayParameterThreshold` option wins over this one. Every client refuses an invalid value when it is created. See [whereIn](/guide/query-builder#wherein).
 
 ```js
 const knex = require('knex')({

@@ -2041,6 +2041,117 @@ describe('QueryBuilder', () => {
       .with.property('message', 'Invalid arrayParameterThreshold: 1.5');
   });
 
+  it('where in refuses arrayParameterThreshold 0 on an empty list', () => {
+    expect(() => {
+      qb()
+        .select('*')
+        .from('users')
+        .whereIn('id', [], { arrayParameterThreshold: 0 });
+    })
+      .to.throw(TypeError)
+      .with.property(
+        'message',
+        'arrayParameterThreshold 0: pass 1 to use one array parameter for any list of 2 or more, -1 to never'
+      );
+  });
+
+  it('having in refuses an arrayParameterThreshold past maxBindParameters on an empty list', () => {
+    expect(() => {
+      new SQLite3_Client({ client: 'sqlite3', useNullAsDefault: true })
+        .queryBuilder()
+        .select('id')
+        .from('users')
+        .groupBy('id')
+        .havingIn('id', [], { arrayParameterThreshold: 40000 });
+    })
+      .to.throw(TypeError)
+      .with.property(
+        'message',
+        "arrayParameterThreshold 40000 exceeds the client's maxBindParameters 32766"
+      );
+  });
+
+  it('on in refuses an arrayParameterThreshold past maxBindParameters on an empty list', () => {
+    expect(() => {
+      qb()
+        .select('*')
+        .from('users')
+        .join('contacts', (join) => {
+          join.onIn('contacts.id', [], { arrayParameterThreshold: 70000 });
+        });
+    })
+      .to.throw(TypeError)
+      .with.property(
+        'message',
+        "arrayParameterThreshold 70000 exceeds the client's maxBindParameters 65535"
+      );
+  });
+
+  it('on in inside a wrapped on refuses an arrayParameterThreshold past maxBindParameters', () => {
+    expect(() => {
+      qb()
+        .select('*')
+        .from('users')
+        .join('contacts', (join) => {
+          join.on((wrapped) => {
+            wrapped.onIn('contacts.id', [1], {
+              arrayParameterThreshold: 70000,
+            });
+          });
+        })
+        .toSQL();
+    })
+      .to.throw(TypeError)
+      .with.property(
+        'message',
+        "arrayParameterThreshold 70000 exceeds the client's maxBindParameters 65535"
+      );
+  });
+
+  it('a refused orWhereNotIn arrayParameterThreshold leaves no not or or flag for the next where', () => {
+    const builder = qb().select('*').from('users').where('a', 1);
+    expect(() => {
+      builder.orWhereNotIn('b', [], { arrayParameterThreshold: 0 });
+    })
+      .to.throw(TypeError)
+      .with.property(
+        'message',
+        'arrayParameterThreshold 0: pass 1 to use one array parameter for any list of 2 or more, -1 to never'
+      );
+    testsql(builder.where('c', 2), {
+      pg: {
+        sql: 'select * from "users" where "a" = ? and "c" = ?',
+        bindings: [1, 2],
+      },
+    });
+  });
+
+  it('the mysql client refuses arrayParameterThreshold 0 in its config', () => {
+    expect(() => {
+      new MySQL_Client({ client: 'mysql', arrayParameterThreshold: 0 });
+    })
+      .to.throw(TypeError)
+      .with.property(
+        'message',
+        'arrayParameterThreshold 0: pass 1 to use one array parameter for any list of 2 or more, -1 to never'
+      );
+  });
+
+  it('the sqlite client refuses an arrayParameterThreshold past maxBindParameters in its config', () => {
+    expect(() => {
+      new SQLite3_Client({
+        client: 'sqlite3',
+        useNullAsDefault: true,
+        arrayParameterThreshold: 40000,
+      });
+    })
+      .to.throw(TypeError)
+      .with.property(
+        'message',
+        "arrayParameterThreshold 40000 exceeds the client's maxBindParameters 32766"
+      );
+  });
+
   it('on not in with an empty list matches every row and leaves no not flag', () => {
     testsql(
       qb()

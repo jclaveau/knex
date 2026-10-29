@@ -1822,7 +1822,7 @@ describe('QueryBuilder', () => {
       .to.throw(TypeError)
       .with.property(
         'message',
-        'arrayParameterThreshold 0: pass 1 to always use one array parameter, -1 to never'
+        'arrayParameterThreshold 0: pass 1 to use one array parameter for any list of 2 or more, -1 to never'
       );
   });
 
@@ -1880,7 +1880,7 @@ describe('QueryBuilder', () => {
       .to.throw(TypeError)
       .with.property(
         'message',
-        'arrayParameterThreshold 0: pass 1 to always use one array parameter, -1 to never'
+        'arrayParameterThreshold 0: pass 1 to use one array parameter for any list of 2 or more, -1 to never'
       );
   });
 
@@ -1906,6 +1906,14 @@ describe('QueryBuilder', () => {
         'message',
         "arrayParameterThreshold 70000 exceeds the client's maxBindParameters 65535"
       );
+  });
+
+  it('where in refuses a Symbol as options by its own message', () => {
+    expect(() => {
+      qb().select('*').from('users').whereIn('id', [1], Symbol('x'));
+    })
+      .to.throw(TypeError)
+      .with.property('message', 'Invalid whereIn options: Symbol(x)');
   });
 
   it('a refused orWhereNotIn option leaves no not or or flag for the next where', () => {

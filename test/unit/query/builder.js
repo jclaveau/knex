@@ -1645,6 +1645,10 @@ describe('QueryBuilder', () => {
           sql: 'select * from "users" where "id" = any(?)',
           bindings: [[1, 2]],
         },
+        cockroachdb: {
+          sql: 'select * from "users" where "id" = any(?)',
+          bindings: [[1, 2]],
+        },
       }
     );
   });
@@ -1752,6 +1756,13 @@ describe('QueryBuilder', () => {
         .havingNotIn('users.id', [3, 4], { arrayParameterThreshold: 1 }),
       {
         pg: {
+          sql: 'select "users"."id" from "users" inner join "contacts" on "contacts"."id" = any(?) group by "users"."id" having "users"."id" <> all(?)',
+          bindings: [
+            [1, 2],
+            [3, 4],
+          ],
+        },
+        cockroachdb: {
           sql: 'select "users"."id" from "users" inner join "contacts" on "contacts"."id" = any(?) group by "users"."id" having "users"."id" <> all(?)',
           bindings: [
             [1, 2],

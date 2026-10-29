@@ -1319,6 +1319,37 @@ describe('Inserts', function () {
               .returning(['Col1', 'Col2']);
           });
         });
+
+        it('knex.batchInsert keeps each chunk under the bind parameter cap', async function () {
+          // SQLite inserts several rows as one compound select, capped at 500
+          // terms: out of scope, see jclaveau/directus#610.
+          if (isSQLite(knex)) {
+            return this.skip();
+          }
+          this.timeout(60000);
+          await knex.schema.dropTableIfExists('batch_insert_bind_cap');
+          try {
+            await knex.schema.createTable('batch_insert_bind_cap', (table) => {
+              for (let index = 0; index < 70; index++) {
+                table.integer(`c${index}`);
+              }
+            });
+            await knex.batchInsert(
+              'batch_insert_bind_cap',
+              Array.from({ length: 1000 }, () =>
+                Object.fromEntries(
+                  Array.from({ length: 70 }, (_, index) => [`c${index}`, index])
+                )
+              ),
+              1000
+            );
+            expect(
+              await knex('batch_insert_bind_cap').select('c69')
+            ).to.have.length(1000);
+          } finally {
+            await knex.schema.dropTableIfExists('batch_insert_bind_cap');
+          }
+        });
       });
 
       it('should validate batchInsert batchSize parameter', async function () {

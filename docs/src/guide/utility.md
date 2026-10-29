@@ -12,6 +12,8 @@ It's primarily designed to be used when you have thousands of rows to insert int
 
 By default, the `chunkSize` is set to 1000.
 
+A chunk also stays under the dialect's bind parameter cap (65535 on PostgreSQL, 2098 on MSSQL), counting one parameter per distinct key across the whole batch: 1000 rows of 70 keys insert in chunks of 936 and 64 rows on PostgreSQL.
+
 BatchInsert also allows for [returning values](/guide/query-builder#returning) and supplying transactions using [transacting](/guide/query-builder#transacting).
 
 ```js

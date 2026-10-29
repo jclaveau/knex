@@ -1896,9 +1896,9 @@ describe('Updates', function () {
           }
         });
 
-        it('sizes a single-key case chunk by its column count on PostgreSQL', async function () {
-          // name and age share the 1000-branch case budget, 500 rows each, so
-          // 1100 rows run as ceil(1100 / 500) = 3 statements.
+        it('caps a single-key case chunk at 250 rows on PostgreSQL', async function () {
+          // The cap doesn't shrink with the column count, so 1100 rows of name
+          // and age run as ceil(1100 / 250) = 5 statements.
           if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
             return this.skip();
           }
@@ -1926,7 +1926,7 @@ describe('Updates', function () {
             knex.off('query', onQuery);
           }
 
-          expect(statements).to.have.lengthOf(3);
+          expect(statements).to.have.lengthOf(5);
           const updated = await knex('members')
             .where('name', 'flat')
             .count({ c: 'id' })

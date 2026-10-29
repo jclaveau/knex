@@ -1627,12 +1627,18 @@ describe('batchUpdate (db-less)', function () {
     });
 
     it('caps a case chunk by key and column count on the measured dialects', function () {
-      expect(clients['pg'].client.batchUpdateRowLimit('case', 1, 3)).to.equal(
-        333
+      expect(clients['pg'].client.batchUpdateRowLimit('case', 1, 1)).to.equal(
+        250
+      );
+      expect(clients['pg'].client.batchUpdateRowLimit('case', 1, 10)).to.equal(
+        250
       );
       expect(clients['pg'].client.batchUpdateRowLimit('case', 2, 3)).to.equal(
         50
       );
+      expect(
+        clients['cockroachdb'].client.batchUpdateRowLimit('case', 1, 10)
+      ).to.equal(250);
       expect(
         clients['cockroachdb'].client.batchUpdateRowLimit('case', 2, 3)
       ).to.equal(50);

@@ -90,8 +90,8 @@ CI run of 0c32392c, with the union cap of 500 rows and the `'case'` cap of
 Postgres has no small compound-SELECT cap, so `union` runs at every size here —
 which lets the three be compared head to head.
 
-CI run of 0c32392c, with the `'case'` chunk cap of
-[PostgreSQL case chunk size](#postgresql-case-chunk-size):
+CI run of 0c32392c, under the earlier `'case'` cap of `floor(1000 / columns)`
+rows (now [250 rows](#postgresql-case-chunk-size)):
 
 | rows×cols | mode  | SQL bytes | params | chunks | exec ms |
 | --------- | ----- | --------: | -----: | -----: | ------: |
@@ -195,46 +195,55 @@ sweep and move the budget.
 
 ## PostgreSQL case chunk size
 
-`Client_PG#batchUpdateRowLimit` caps a `'case'` chunk at
-`floor(CASE_BRANCH_BUDGET / columns)` rows (at least 1), with
-`CASE_BRANCH_BUDGET = 1000`, and a composite key's chunk at
-`COMPOSITE_CASE_ROWS = 50`. As on SQLite each updated row walks every column's
-CASE list, so a wide row wants a short chunk. A composite key's WHERE is an OR
-chain that PostgreSQL plans as a BitmapOr of one index scan per row, and its
-planning time grows faster than the chain: `EXPLAIN ANALYZE` on a 10000-row
-table gives 2.5 ms planning and 2.7 ms execution at 50 rows, 679 ms planning
-and 49 ms execution at 1000. That plan needs a table much larger than the
-chunk: on an analyzed 2000-row table a 1000-row chunk takes a seq scan with
-13 ms planning, so a big chunk only costs on big tables, where it matters.
-CockroachDB inherits the cap; Redshift keeps `chunkSize` and the bind cap until
-it is measured.
+`Client_PG#batchUpdateRowLimit` caps a single-key `'case'` chunk at
+`SINGLE_KEY_CASE_ROWS = 250` rows and a composite key's chunk at
+`COMPOSITE_CASE_ROWS = 50`. Unlike SQLite, the fastest single-key chunk doesn't
+shrink with the column count: from 1 to 10 columns it stays between 50 and 500
+rows. Over this sweep and four earlier ones (CI run of 0c32392c, and local runs
+in ascending, descending and fresh-table cap order), 250 comes within 12% of the
+best cap in 13 of the 15 rows, `floor(1000 / columns)` in 10 and 500 in 8. Reruns
+of one sweep swing a row by up to 45% (1 column at cap 250: best, then 465 vs
+321 ms for cap 500), so no flat cap beats that spread.
+A composite key's WHERE is an OR chain that PostgreSQL plans as a BitmapOr of one
+index scan per row, and its planning time grows faster than the chain:
+`EXPLAIN ANALYZE` on a 10000-row table gives 2.5 ms planning and 2.7 ms
+execution at 50 rows, 679 ms planning and 49 ms execution at 1000. That plan
+needs a table much larger than the chunk: on an analyzed 2000-row table a
+1000-row chunk takes a seq scan with 13 ms planning, so a big chunk only costs
+on big tables, where it matters. CockroachDB inherits both caps: on it 50, 100
+and 250 rows come within noise of each other (worst ratio to the best cap 1.25
+to 1.36 for each, single key and composite). Redshift keeps `chunkSize` and the
+bind cap until it is measured.
 
 `benchCaseChunkSize` in `batch-update-benchmark.js` prints these tables
 (`DB=postgres` / `DB=cockroachdb`, 10000 rows, median wall ms of 3 runs; column
-headers are the forced row cap). The integration test "runs a composite-key case
-batch fastest at the shipped PostgreSQL chunk" pins the 2 keys × 1 column row,
-updating 2000 rows of an analyzed 10000-row table (shipped 50 beats 5 and 1000),
-so a PostgreSQL release that changes this fails CI: re-run the sweep and move
-the cap.
+headers are the forced row cap). Each cap runs on a freshly seeded, analyzed
+table after one discarded run: on one shared table the dead rows of the earlier
+caps slowed the later ones (2 keys × 1 column at cap 1000 took 5820 ms after the
+small caps vs 1911 ms run first). The integration test "runs a composite-key case batch fastest
+at the shipped PostgreSQL chunk" pins the 2 keys × 1 column row, updating 2000
+rows of an analyzed 10000-row table (shipped 50 beats 5 and 1000), so a
+PostgreSQL release that changes this fails CI: re-run the sweep and move the
+cap.
 
-PostgreSQL (postgres:17):
+PostgreSQL (postgres:17, local docker):
 
-| keys | cols |    5 |   10 |   25 |   50 |  100 |  250 |  500 |  1000 | shipped cap |
-| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ----: | ----------: |
-|    1 |    1 | 1689 |  729 |  500 |  404 |  309 |  321 |  271 |   306 |        1000 |
-|    1 |    3 | 1841 | 1527 |  815 |  653 |  620 |  557 |  577 |   836 |         333 |
-|    1 |   10 | 3502 | 2437 | 1836 | 1617 | 1555 | 1710 | 2148 |  2660 |         100 |
-|    2 |    1 | 2133 | 1567 | 1298 | 1265 | 1725 | 1908 | 1901 |  5972 |          50 |
-|    2 |    3 | 2666 | 2226 | 1809 | 1958 | 1910 | 2329 | 3878 |  6645 |          50 |
-|    2 |   10 | 4944 | 4060 | 3831 | 3520 | 3676 | 4740 | 6535 | 10851 |          50 |
+| keys | cols |    5 |   10 |   25 |   50 |  100 |  250 |  500 | 1000 | shipped cap |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ----------: |
+|    1 |    1 | 1569 |  931 |  751 |  527 |  435 |  465 |  321 |  337 |         250 |
+|    1 |    3 | 1804 | 1248 |  824 |  761 |  968 |  644 |  578 |  683 |         250 |
+|    1 |   10 | 2889 | 2695 | 1772 | 1456 | 1763 | 1573 | 1836 | 2166 |         250 |
+|    2 |    1 | 2181 | 1408 | 1247 | 1066 | 1310 | 1799 | 3021 | 5159 |          50 |
+|    2 |    3 | 3085 | 2219 | 1596 | 1506 | 1562 | 2410 | 3336 | 5917 |          50 |
+|    2 |   10 | 4048 | 3569 | 3049 | 3120 | 3141 | 4557 | 5450 | 9414 |          50 |
 
-CockroachDB:
+CockroachDB (v23.2 single node, 2 GB container on a 2-core i3-4005U):
 
 | keys | cols |     5 |    10 |    25 |    50 |   100 |   250 |   500 |  1000 | shipped cap |
 | ---: | ---: | ----: | ----: | ----: | ----: | ----: | ----: | ----: | ----: | ----------: |
-|    1 |    1 | 13312 |  7523 |  3680 |  2588 |  2331 |  1927 |  1743 |  2006 |        1000 |
-|    1 |    3 | 11755 |  8225 |  4081 |  3083 |  3077 |  3696 |  3734 |  4901 |         333 |
-|    1 |   10 | 10977 |  8342 |  7535 |  6686 |  6443 |  6448 |  7789 | 10822 |         100 |
-|    2 |    1 | 11218 |  6593 |  5210 |  3611 |  3993 |  4143 |  3870 |  5168 |          50 |
-|    2 |    3 | 12996 |  7614 |  6287 |  8075 |  6487 |  6697 |  7289 |  7933 |          50 |
-|    2 |   10 | 19586 | 12598 | 14780 | 10932 | 12150 | 14394 | 17227 | 25052 |          50 |
+|    1 |    1 |  6114 |  3785 |  2242 |  1940 |  1652 |  2244 |  1825 |  1972 |         250 |
+|    1 |    3 | 10000 |  7006 |  4147 |  3229 |  4103 |  4406 |  3849 |  4654 |         250 |
+|    1 |   10 | 16586 | 12116 | 12833 | 10661 | 10483 |  9405 | 10449 | 13778 |         250 |
+|    2 |    1 | 10826 |  7474 |  5197 |  4395 |  5067 |  4804 |  4044 |  4068 |          50 |
+|    2 |    3 | 14048 | 10428 |  7948 |  8491 |  7860 |  7455 |  6849 |  7898 |          50 |
+|    2 |   10 | 23852 | 19909 | 22135 | 19925 | 16576 | 16019 | 17207 | 22007 |          50 |

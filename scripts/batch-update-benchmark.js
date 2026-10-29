@@ -322,16 +322,6 @@ async function benchCaseChunkSize(knex) {
     for (const colCount of sweep.columnCounts) {
       const keyColumns = Array.from({ length: keyCount }, (_, i) => `k${i}`);
       const columns = Array.from({ length: colCount }, (_, i) => `c${i}`);
-      await knex.schema.dropTableIfExists('bench_case');
-      await knex.schema.createTable('bench_case', (table) => {
-        for (const column of keyColumns) {
-          table.integer(column);
-        }
-        for (const column of columns) {
-          table.string(column);
-        }
-        table.primary(keyColumns);
-      });
       const buildRows = (label) =>
         Array.from({ length: sweep.rows }, (_, id) => {
           const row = {};
@@ -343,11 +333,6 @@ async function benchCaseChunkSize(knex) {
           }
           return row;
         });
-      await knex.batchInsert(
-        'bench_case',
-        buildRows('seed'),
-        Math.floor(500 / (keyCount + colCount))
-      );
       const shippedCap = knex.client.batchUpdateRowLimit(
         'case',
         keyCount,
@@ -355,7 +340,36 @@ async function benchCaseChunkSize(knex) {
       );
       const cells = [];
       for (const cap of sweep.caps) {
+        // A fresh, analyzed table and one discarded run per cap: on one shared
+        // table the dead rows of earlier caps slow the later ones (on
+        // PostgreSQL 2 keys × 1 column at cap 1000 took 5820 ms after the small
+        // caps vs 1911 ms run first).
+        await knex.schema.dropTableIfExists('bench_case');
+        await knex.schema.createTable('bench_case', (table) => {
+          for (const column of keyColumns) {
+            table.integer(column);
+          }
+          for (const column of columns) {
+            table.string(column);
+          }
+          table.primary(keyColumns);
+        });
+        await knex.batchInsert(
+          'bench_case',
+          buildRows('seed'),
+          Math.floor(500 / (keyCount + colCount))
+        );
+        await knex.raw('analyze ??', ['bench_case']);
         knex.client.batchUpdateRowLimit = () => cap;
+        await knex.batchUpdate(
+          'bench_case',
+          buildRows(`warm-${cap}`),
+          keyColumns,
+          {
+            mode: 'case',
+            chunkSize: sweep.rows,
+          }
+        );
         const samples = [];
         for (let run = 0; run < sweep.runs; run++) {
           const updates = buildRows(`${cap}-${run}`);

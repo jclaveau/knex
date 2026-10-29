@@ -2046,11 +2046,11 @@ knex('users').whereIn('id', ids1001, { arrayParameterThreshold: -1 });
 
 - `-1`: never bind one array; past 65535 values PostgreSQL refuses the statement.
 - `null` / `undefined`: the client config's value.
-- `0`, a value past 65535, or anything other than an integer: a `TypeError`.
+- `0`, a value below `-1` or past 65535, or anything other than an integer: a `TypeError`.
 
 Use `-1` for a column whose type has no array type: the array parameter's type comes from the column.
 
-Lists of tuples, subqueries, callbacks, and lists holding a raw or an object keep the `in (…)` form.
+Lists of tuples, subqueries, callbacks, and lists holding a raw or an object other than a `Date` or a `Buffer` keep the `in (…)` form.
 :::
 
 ### whereNotIn

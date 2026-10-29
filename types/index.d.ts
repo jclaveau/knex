@@ -759,6 +759,8 @@ declare namespace Knex {
     orHaving: Having<TRecord, TResult>;
     orHavingRaw: RawQueryBuilder<TRecord, TResult>;
     havingIn: HavingIn<TRecord, TResult>;
+    andHavingIn: HavingIn<TRecord, TResult>;
+    orHavingIn: HavingIn<TRecord, TResult>;
     orHavingNotBetween: HavingRange<TRecord, TResult>;
     havingNotBetween: HavingRange<TRecord, TResult>;
     orHavingBetween: HavingRange<TRecord, TResult>;

@@ -30,6 +30,8 @@ const main = async () => {
     await knex<User>('users')
       .groupBy('id')
       .havingIn('id', [1, 2], { arrayParameterThreshold: 1 })
+      .orHavingIn('id', [3, 4], { arrayParameterThreshold: 1 })
+      .andHavingIn('id', [5, 6], { arrayParameterThreshold: 1 })
   );
 
   expectType<User[]>(

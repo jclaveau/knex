@@ -229,7 +229,7 @@ describe('batchUpdate (db-less)', function () {
     );
   });
 
-  it('casts a raw first-row cell whole in union mode (postgres)', function () {
+  it('casts the first bound value of a column led by a raw cell (postgres)', function () {
     const knex = clients['pg'];
     expect(
       knex('users')
@@ -244,7 +244,7 @@ describe('batchUpdate (db-less)', function () {
         .toSQL()
         .toNative()
     ).to.eql({
-      sql: 'update "users" set "age" = "v"."age", "seen" = "v"."seen" from (select $1::bigint as "id", (40 + 2)::bigint as "age", (CURRENT_TIMESTAMP)::timestamptz as "seen" union all select $2, $3, $4) as "v" where "users"."id" = "v"."id"',
+      sql: 'update "users" set "age" = "v"."age", "seen" = "v"."seen" from (select $1::bigint as "id", 40 + 2 as "age", CURRENT_TIMESTAMP as "seen" union all select $2, $3::bigint, $4::timestamptz) as "v" where "users"."id" = "v"."id"',
       bindings: [1, 2, 3, new Date(0)],
     });
   });
@@ -264,12 +264,12 @@ describe('batchUpdate (db-less)', function () {
         .toSQL()
         .toNative()
     ).to.eql({
-      sql: 'update "users" set "n" = "v"."n" from (select $1::bigint as "id", (1 + 1)::numeric as "n" union all select $2, $3) as "v" where "users"."id" = "v"."id"',
+      sql: 'update "users" set "n" = "v"."n" from (select $1::bigint as "id", 1 + 1 as "n" union all select $2, $3::numeric) as "v" where "users"."id" = "v"."id"',
       bindings: [1, 2, 1.5],
     });
   });
 
-  it('casts a raw cell in a later row (postgres)', function () {
+  it('leaves a raw cell in a later row uncast (postgres)', function () {
     const knex = clients['pg'];
     expect(
       knex('users')
@@ -284,7 +284,7 @@ describe('batchUpdate (db-less)', function () {
         .toSQL()
         .toNative()
     ).to.eql({
-      sql: 'update "users" set "s" = "v"."s" from (select $1::bigint as "id", $2::text as "s" union all select $3, (now())::text) as "v" where "users"."id" = "v"."id"',
+      sql: 'update "users" set "s" = "v"."s" from (select $1::bigint as "id", $2::text as "s" union all select $3, now()) as "v" where "users"."id" = "v"."id"',
       bindings: [1, 'a', 2],
     });
   });
@@ -310,6 +310,26 @@ describe('batchUpdate (db-less)', function () {
     });
   });
 
+  it('leaves a raw cell uncast where the cast is inferred (postgres)', function () {
+    const knex = clients['pg'];
+    expect(
+      knex('users')
+        .batchUpdate(
+          [
+            { id: 1, price: 10 },
+            { id: 2, price: knex.raw('? * 1.5', [7]) },
+          ],
+          ['id'],
+          ['price']
+        )
+        .toSQL()
+        .toNative()
+    ).to.eql({
+      sql: 'update "users" set "price" = "v"."price" from (select $1::bigint as "id", $2::bigint as "price" union all select $3, $4 * 1.5) as "v" where "users"."id" = "v"."id"',
+      bindings: [1, 10, 2, 7],
+    });
+  });
+
   it('leaves a column of raw cells and nulls uncast (postgres)', function () {
     const knex = clients['pg'];
     expect(
@@ -330,7 +350,7 @@ describe('batchUpdate (db-less)', function () {
     });
   });
 
-  it('compiles a function value as a cast subquery (postgres)', function () {
+  it('compiles a function value as an uncast subquery (postgres)', function () {
     expect(
       clients['pg']('users')
         .batchUpdate(
@@ -349,7 +369,7 @@ describe('batchUpdate (db-less)', function () {
         .toSQL()
         .toNative()
     ).to.eql({
-      sql: 'update "users" set "name" = "v"."name" from (select $1::bigint as "id", ((select "x" from "y"))::text as "name" union all select $2, $3) as "v" where "users"."id" = "v"."id"',
+      sql: 'update "users" set "name" = "v"."name" from (select $1::bigint as "id", (select "x" from "y") as "name" union all select $2, $3::text) as "v" where "users"."id" = "v"."id"',
       bindings: [1, 2, 'b'],
     });
   });
@@ -1206,26 +1226,6 @@ describe('batchUpdate (db-less)', function () {
       ).to.throw(/Invalid columnTypes\.name/);
     });
 
-    it('rejects a type name behind more than one schema', function () {
-      expect(() =>
-        clients['pg'].batchUpdate('users', rows, 'id', {
-          columnTypes: { name: 'db.other.mood' },
-        })
-      )
-        .to.throw(TypeError)
-        .with.property(
-          'message',
-          'Invalid columnTypes.name: "db.other.mood" is not a valid type name'
-        );
-    });
-
-    it('interpolates parameterized and array type names into the casts', function () {
-      for (const type of [
-        'text[]',
-        'varchar(255)',
-        'numeric(10, 2)',
-        'timestamp(3) with time zone',
-        '"public"."mood"[]',
     it('rejects a type name followed by SQL', function () {
       expect(() =>
         clients['pg'].batchUpdate('users', rows, 'id', {
@@ -1249,6 +1249,31 @@ describe('batchUpdate (db-less)', function () {
         );
     });
 
+    it('rejects a type name behind more than one schema', function () {
+      expect(() =>
+        clients['pg'].batchUpdate('users', rows, 'id', {
+          columnTypes: { name: 'db.other.mood' },
+        })
+      )
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          'Invalid columnTypes.name: "db.other.mood" is not a valid type name'
+        );
+    });
+
+    it('interpolates parameterized and array type names into the casts', function () {
+      for (const type of [
+        'text[]',
+        'varchar(255)',
+        'numeric(10, 2)',
+        'timestamp(3) with time zone',
+        'time without time zone',
+        'double precision',
+        'character varying(255)',
+        'interval day to second(3)',
+        'bigint unsigned zerofill',
+        '"public"."mood"[]',
       ]) {
         const { sql } = clients['pg']('users')
           .batchUpdate(rows, ['id'], ['name', 'age'], { name: type })
@@ -1268,11 +1293,6 @@ describe('batchUpdate (db-less)', function () {
       let error;
       try {
         await resolveColumnTypesFromDb(dialectClient, null, 'users', [
-        'time without time zone',
-        'double precision',
-        'character varying(255)',
-        'interval day to second(3)',
-        'bigint unsigned zerofill',
           'id',
           'mood',
         ]);

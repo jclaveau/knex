@@ -1227,6 +1227,51 @@ describe('Updates', function () {
           ]);
         });
 
+        it('keeps the type of a raw cell among inferred integers', async function () {
+          if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+            return this.skip();
+          }
+          await knex.schema.dropTableIfExists('amounts');
+          await knex.raw(
+            'create table amounts (id integer primary key, n numeric(10,2))'
+          );
+          await knex('amounts').insert([
+            { id: 1, n: 0 },
+            { id: 2, n: 0 },
+          ]);
+
+          let error;
+          try {
+            await knex.batchUpdate(
+              'amounts',
+              [
+                { id: 1, n: 10 },
+                { id: 2, n: knex.raw('? * 1.5', [7]) },
+              ],
+              'id',
+              { mode: 'union' }
+            );
+          } catch (caught) {
+            error = caught;
+          }
+
+          const rows = await knex('amounts')
+            .select(knex.raw('n::text as n'))
+            .orderBy('id');
+          await knex.schema.dropTableIfExists('amounts');
+          // CockroachDB types a later UNION branch from the first one, so the
+          // raw fails loudly instead of being rounded into a bigint.
+          if (isCockroachDB(knex)) {
+            expect(error.message).to.equal(
+              'update "amounts" set "n" = "v"."n" from (select $1::bigint as "id", $2::bigint as "n" union all select $3, $4 * 1.5) as "v" where "amounts"."id" = "v"."id" - unsupported binary operator: <anyelement> * <decimal> (desired <int>)'
+            );
+            expect(rows).to.eql([{ n: '0.00' }, { n: '0.00' }]);
+          } else {
+            expect(error).to.equal(undefined);
+            expect(rows).to.eql([{ n: '10.00' }, { n: '10.50' }]);
+          }
+        });
+
         it("rejects a value too long for a varchar column resolved with 'from_db', as .update() does", async function () {
           if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
             return this.skip();

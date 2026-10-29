@@ -369,6 +369,100 @@ describe('Where', function () {
         expect(joinedOtherAccounts).to.deep.equal([firstAccountId]);
       });
 
+      it('handles "where in" past arrayParameterThreshold on int, uuid and text keys', async function () {
+        if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+          return this.skip();
+        }
+        await knex.schema.dropTableIfExists('array_parameter_keys');
+        try {
+          await knex.schema.createTable('array_parameter_keys', (table) => {
+            table.integer('int_key');
+            table.uuid('uuid_key');
+            table.text('text_key');
+          });
+          await knex('array_parameter_keys').insert([
+            {
+              int_key: 1,
+              uuid_key: '00000000-0000-4000-8000-000000000001',
+              text_key: 'a',
+            },
+            {
+              int_key: 2,
+              uuid_key: '00000000-0000-4000-8000-000000000002',
+              text_key: 'b',
+            },
+            {
+              int_key: 3,
+              uuid_key: '00000000-0000-4000-8000-000000000003',
+              text_key: 'c',
+            },
+          ]);
+          for (const keyCount of [1001, 70000]) {
+            const intKeys = [
+              ...Array.from({ length: keyCount - 2 }, (_, index) => -index),
+              1,
+              2,
+            ];
+            const uuidKeys = [
+              ...Array.from(
+                { length: keyCount - 2 },
+                (_, index) =>
+                  `ffffffff-0000-4000-8000-${String(index).padStart(12, '0')}`
+              ),
+              '00000000-0000-4000-8000-000000000001',
+              '00000000-0000-4000-8000-000000000002',
+            ];
+            const textKeys = [
+              ...Array.from(
+                { length: keyCount - 2 },
+                (_, index) => `missing-${index}`
+              ),
+              'a',
+              'b',
+            ];
+            for (const [column, keys] of [
+              ['int_key', intKeys],
+              ['uuid_key', uuidKeys],
+              ['text_key', textKeys],
+            ]) {
+              expect(
+                await knex('array_parameter_keys')
+                  .whereIn(column, keys)
+                  .orderBy('text_key')
+                  .pluck('text_key')
+              ).to.deep.equal(['a', 'b']);
+              expect(
+                await knex('array_parameter_keys')
+                  .whereNotIn(column, keys)
+                  .pluck('text_key')
+              ).to.deep.equal(['c']);
+            }
+          }
+          expect(
+            knex('array_parameter_keys')
+              .whereIn(
+                'int_key',
+                Array.from({ length: 1001 }, (_, index) => index)
+              )
+              .toSQL().sql
+          ).to.equal(
+            'select * from "array_parameter_keys" where "int_key" = any(?)'
+          );
+          expect(
+            await knex('array_parameter_keys')
+              .whereIn(
+                'int_key',
+                [...Array.from({ length: 999 }, (_, index) => -index), 1, 2],
+                { arrayParameterThreshold: -1 }
+              )
+              .orderBy('text_key')
+              .pluck('text_key')
+          ).to.deep.equal(['a', 'b']);
+        } finally {
+          await knex.schema.dropTableIfExists('array_parameter_keys');
+        }
+      });
+
       it('handles "where in" raw cases', async () => {
         await knex('accounts')
           // COALESCE() is used here simply to generate a valid left-hand-side

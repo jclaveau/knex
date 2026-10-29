@@ -433,14 +433,14 @@ interface Knex<TRecord extends {} = any, TResult = any[]>
           // columns from the table row type and accepts only 'from_data'.
           mode?: 'union' | 'json';
           chunkSize?: number;
-          onDuplicateKey?: 'last' | 'throw';
+          onDuplicateKey?: 'each' | 'last' | 'throw';
           columnTypes?: { [column: string]: string } | 'from_data' | 'from_db';
         }
       | {
           // 'case' types values from the target column, so columnTypes can't apply.
           mode: 'case';
           chunkSize?: number;
-          onDuplicateKey?: 'last' | 'throw';
+          onDuplicateKey?: 'each' | 'last' | 'throw';
         }
   ): Knex.BatchUpdateBuilder<TRecord2, TResult2>;
 

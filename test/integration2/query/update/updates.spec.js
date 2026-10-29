@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const { TEST_TIMESTAMP } = require('../../../util/constants');
 const {
   isPostgreSQL,
+  isPgBased,
   isMysql,
   isMariaDB,
   isMssql,
@@ -773,14 +774,20 @@ describe('Updates', function () {
           ]);
 
           const rows = await knex('members').orderBy('id');
-          // Number() coerces CockroachDB's int-as-string columns.
-          expect(rows.map((r) => [Number(r.id), r.name, Number(r.age)])).to.eql(
-            [
-              [1, 'new1', 11],
-              [2, 'new2', 22],
-              [3, 'decoy', 99], // outside the batch — must be unchanged
-            ]
-          );
+          if (isCockroachDB(knex)) {
+            // CockroachDB's integer is int8, which pg returns as a string.
+            expect(rows).to.eql([
+              { id: '1', name: 'new1', age: '11' },
+              { id: '2', name: 'new2', age: '22' },
+              { id: '3', name: 'decoy', age: '99' }, // outside the batch — must be unchanged
+            ]);
+          } else {
+            expect(rows).to.eql([
+              { id: 1, name: 'new1', age: 11 },
+              { id: 2, name: 'new2', age: 22 },
+              { id: 3, name: 'decoy', age: 99 }, // outside the batch — must be unchanged
+            ]);
+          }
         });
 
         it("updates each row to its own values with mode: 'case'", async function () {
@@ -795,13 +802,20 @@ describe('Updates', function () {
           );
 
           const rows = await knex('members').orderBy('id');
-          expect(rows.map((r) => [Number(r.id), r.name, Number(r.age)])).to.eql(
-            [
-              [1, 'new1', 11],
-              [2, 'new2', 22],
-              [3, 'decoy', 99], // outside the batch — must be unchanged
-            ]
-          );
+          if (isCockroachDB(knex)) {
+            // CockroachDB's integer is int8, which pg returns as a string.
+            expect(rows).to.eql([
+              { id: '1', name: 'new1', age: '11' },
+              { id: '2', name: 'new2', age: '22' },
+              { id: '3', name: 'decoy', age: '99' }, // outside the batch — must be unchanged
+            ]);
+          } else {
+            expect(rows).to.eql([
+              { id: 1, name: 'new1', age: 11 },
+              { id: 2, name: 'new2', age: 22 },
+              { id: 3, name: 'decoy', age: 99 }, // outside the batch — must be unchanged
+            ]);
+          }
         });
 
         it("updates each row to its own values with mode: 'json'", async function () {
@@ -839,13 +853,20 @@ describe('Updates', function () {
           );
 
           const rows = await knex('members').orderBy('id');
-          expect(rows.map((r) => [Number(r.id), r.name, Number(r.age)])).to.eql(
-            [
-              [1, 'new1', 11],
-              [2, 'new2', 22],
-              [3, 'decoy', 99], // outside the batch — must be unchanged
-            ]
-          );
+          if (isCockroachDB(knex)) {
+            // CockroachDB's integer is int8, which pg returns as a string.
+            expect(rows).to.eql([
+              { id: '1', name: 'new1', age: '11' },
+              { id: '2', name: 'new2', age: '22' },
+              { id: '3', name: 'decoy', age: '99' }, // outside the batch — must be unchanged
+            ]);
+          } else {
+            expect(rows).to.eql([
+              { id: 1, name: 'new1', age: 11 },
+              { id: 2, name: 'new2', age: 22 },
+              { id: 3, name: 'decoy', age: 99 }, // outside the batch — must be unchanged
+            ]);
+          }
         });
 
         it("resolves columnTypes from the schema with 'from_db'", async function () {
@@ -866,13 +887,11 @@ describe('Updates', function () {
           );
 
           const rows = await knex('members').orderBy('id');
-          expect(rows.map((r) => [Number(r.id), r.name, Number(r.age)])).to.eql(
-            [
-              [1, 'fromdb1', 11],
-              [2, 'fromdb2', 22],
-              [3, 'decoy', 99],
-            ]
-          );
+          expect(rows).to.eql([
+            { id: 1, name: 'fromdb1', age: 11 },
+            { id: 2, name: 'fromdb2', age: 22 },
+            { id: 3, name: 'decoy', age: 99 },
+          ]);
         });
 
         it("types uuid, enum and text[] columns from the table row type in 'json' mode", async function () {
@@ -986,6 +1005,48 @@ describe('Updates', function () {
           ]);
         });
 
+        it('casts to an enum named behind its schema in columnTypes', async function () {
+          // A bare `schema.type` reaches the cast as written, so an enum outside
+          // the search_path needs no quoting.
+          if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+            return this.skip();
+          }
+          await knex.raw('drop schema if exists batch_moods cascade');
+          await knex.raw('create schema batch_moods');
+          await knex.raw(
+            "create type batch_moods.mood_level as enum ('low', 'high')"
+          );
+          await knex.raw(
+            'create table batch_moods.moods (id integer primary key, level batch_moods.mood_level)'
+          );
+          await knex('batch_moods.moods').insert([
+            { id: 1, level: 'low' },
+            { id: 2, level: 'low' },
+          ]);
+
+          await knex.batchUpdate(
+            'batch_moods.moods',
+            [{ id: 1, level: 'high' }],
+            'id',
+            { mode: 'union', columnTypes: { level: 'batch_moods.mood_level' } }
+          );
+
+          const rows = await knex('batch_moods.moods').orderBy('id');
+          await knex.raw('drop schema batch_moods cascade');
+          if (isCockroachDB(knex)) {
+            // CockroachDB's integer is int8, which pg returns as a string.
+            expect(rows).to.eql([
+              { id: '1', level: 'high' },
+              { id: '2', level: 'low' },
+            ]);
+          } else {
+            expect(rows).to.eql([
+              { id: 1, level: 'high' },
+              { id: 2, level: 'low' },
+            ]);
+          }
+        });
+
         it("casts enum and text[] columns resolved with 'from_db' in 'union' mode", async function () {
           if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
             return this.skip();
@@ -1011,11 +1072,305 @@ describe('Updates', function () {
           const rows = await knex('moods').orderBy('id');
           await knex.schema.dropTableIfExists('moods');
           await knex.raw('drop type if exists mood_level');
-          // Number() coerces CockroachDB's int-as-string columns.
-          expect(rows.map((r) => [Number(r.id), r.level, r.tags])).to.eql([
-            [1, 'high', ['x', 'y']],
-            [2, 'low', ['decoy']],
+          if (isCockroachDB(knex)) {
+            // CockroachDB's integer is int8, which pg returns as a string.
+            expect(rows).to.eql([
+              { id: '1', level: 'high', tags: ['x', 'y'] },
+              { id: '2', level: 'low', tags: ['decoy'] },
+            ]);
+          } else {
+            expect(rows).to.eql([
+              { id: 1, level: 'high', tags: ['x', 'y'] },
+              { id: 2, level: 'low', tags: ['decoy'] },
+            ]);
+          }
+        });
+
+        it("writes varchar and char columns resolved with 'from_db' in full", async function () {
+          if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+            return this.skip();
+          }
+          await knex.schema.dropTableIfExists('codes');
+          await knex.raw(
+            'create table codes (id integer primary key, label varchar(5), code char(3), flags bit(3))'
+          );
+          await knex('codes').insert([
+            { id: 1, label: 'old', code: 'old', flags: '000' },
+            { id: 2, label: 'decoy', code: 'dec', flags: '000' },
           ]);
+
+          await knex.batchUpdate(
+            'public.codes',
+            [{ id: 1, label: 'abcde', code: 'xyz', flags: '101' }],
+            'id',
+            { mode: 'union', columnTypes: 'from_db' }
+          );
+
+          const rows = await knex('codes')
+            .select('label', 'code', 'flags')
+            .orderBy('id');
+          await knex.schema.dropTableIfExists('codes');
+          expect(rows).to.eql([
+            { label: 'abcde', code: 'xyz', flags: '101' },
+            { label: 'decoy', code: 'dec', flags: '000' },
+          ]);
+        });
+
+        it("resolves 'from_db' types for a database.schema.table name", async function () {
+          if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+            return this.skip();
+          }
+          await knex.schema.dropTableIfExists('codes');
+          await knex.raw(
+            'create table codes (id integer primary key, label varchar(5))'
+          );
+          await knex('codes').insert([
+            { id: 1, label: 'old' },
+            { id: 2, label: 'decoy' },
+          ]);
+
+          await knex.batchUpdate(
+            `${knex.client.database()}.public.codes`,
+            [{ id: 1, label: 'new' }],
+            'id',
+            { mode: 'union', columnTypes: 'from_db' }
+          );
+
+          const rows = await knex('codes').select('label').orderBy('id');
+          await knex.schema.dropTableIfExists('codes');
+          expect(rows).to.eql([{ label: 'new' }, { label: 'decoy' }]);
+        });
+
+        it("casts int2vector and an array domain under their own 'from_db' name", async function () {
+          if (!isPostgreSQL(knex)) {
+            return this.skip();
+          }
+          await knex.schema.dropTableIfExists('vectors');
+          await knex.raw('drop domain if exists positive_ints');
+          await knex.raw(
+            'create domain positive_ints as integer[] check (0 < all(value))'
+          );
+          await knex.raw(
+            'create table vectors (id integer primary key, iv int2vector, pa positive_ints)'
+          );
+          await knex('vectors').insert([
+            { id: 1, iv: '1', pa: '{1}' },
+            { id: 2, iv: '9', pa: '{9}' },
+          ]);
+
+          await knex.batchUpdate(
+            'vectors',
+            [{ id: 1, iv: '1 2', pa: '{1,2}' }],
+            'id',
+            { mode: 'union', columnTypes: 'from_db' }
+          );
+
+          const rows = await knex('vectors')
+            .select(knex.raw('iv::text as iv'), 'pa')
+            .orderBy('id');
+          await knex.schema.dropTableIfExists('vectors');
+          await knex.raw('drop domain positive_ints');
+          expect(rows).to.eql([
+            { iv: '1 2', pa: [1, 2] },
+            { iv: '9', pa: [9] },
+          ]);
+        });
+
+        it("reads 'from_db' types and writes through a wrapIdentifier", async function () {
+          if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+            return this.skip();
+          }
+          const snakeKnex = require('../../../../knex')({
+            ...knex.client.config,
+            wrapIdentifier: (value, origImpl) =>
+              origImpl(
+                {
+                  snakeUsers: 'snake_users',
+                  userId: 'user_id',
+                  displayName: 'display_name',
+                }[value] || value
+              ),
+          });
+          await knex.schema.dropTableIfExists('snake_users');
+          await knex.raw(
+            'create table snake_users (user_id integer primary key, display_name varchar(10), avatar bytea)'
+          );
+          await knex('snake_users').insert([
+            { user_id: 1, display_name: 'old', avatar: Buffer.from('old') },
+            { user_id: 2, display_name: 'decoy', avatar: Buffer.from('decoy') },
+          ]);
+
+          try {
+            await snakeKnex.batchUpdate(
+              'snakeUsers',
+              [{ userId: 1, displayName: 'union', avatar: Buffer.from('u') }],
+              'userId',
+              { mode: 'union', columnTypes: 'from_db' }
+            );
+            await snakeKnex.batchUpdate(
+              'snakeUsers',
+              [{ userId: 2, displayName: 'json', avatar: Buffer.from('j') }],
+              'userId',
+              { mode: 'json' }
+            );
+          } finally {
+            await snakeKnex.destroy();
+          }
+
+          const rows = await knex('snake_users')
+            .select('display_name', 'avatar')
+            .orderBy('user_id');
+          await knex.schema.dropTableIfExists('snake_users');
+          expect(rows).to.eql([
+            { display_name: 'union', avatar: Buffer.from('u') },
+            { display_name: 'json', avatar: Buffer.from('j') },
+          ]);
+        });
+
+        it('types raw cells like the bound values of their column', async function () {
+          if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+            return this.skip();
+          }
+          await knex.schema.dropTableIfExists('amounts');
+          await knex.raw(
+            'create table amounts (id integer primary key, n numeric(10,2), i integer)'
+          );
+          await knex('amounts').insert([
+            { id: 1, n: 0, i: 0 },
+            { id: 2, n: 0, i: 0 },
+          ]);
+
+          await knex.batchUpdate(
+            'amounts',
+            [
+              { id: 1, n: knex.raw('1 + 1'), i: knex.raw("'4'") },
+              { id: 2, n: 1.5, i: 5 },
+            ],
+            'id',
+            { mode: 'union', columnTypes: 'from_db' }
+          );
+
+          const rows = await knex('amounts')
+            .select(knex.raw('n::text as n'), knex.raw('i::text as i'))
+            .orderBy('id');
+          await knex.schema.dropTableIfExists('amounts');
+          expect(rows).to.eql([
+            { n: '2.00', i: '4' },
+            { n: '1.50', i: '5' },
+          ]);
+        });
+
+        it('keeps the type of a raw cell among inferred integers', async function () {
+          if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+            return this.skip();
+          }
+          await knex.schema.dropTableIfExists('amounts');
+          await knex.raw(
+            'create table amounts (id integer primary key, n numeric(10,2))'
+          );
+          await knex('amounts').insert([
+            { id: 1, n: 0 },
+            { id: 2, n: 0 },
+          ]);
+
+          let error;
+          try {
+            await knex.batchUpdate(
+              'amounts',
+              [
+                { id: 1, n: 10 },
+                { id: 2, n: knex.raw('? * 1.5', [7]) },
+              ],
+              'id',
+              { mode: 'union' }
+            );
+          } catch (caught) {
+            error = caught;
+          }
+
+          const rows = await knex('amounts')
+            .select(knex.raw('n::text as n'))
+            .orderBy('id');
+          await knex.schema.dropTableIfExists('amounts');
+          // CockroachDB types a later UNION branch from the first one, so the
+          // raw fails loudly instead of being rounded into a bigint.
+          if (isCockroachDB(knex)) {
+            expect(error.message).to.equal(
+              'update "amounts" set "n" = "v"."n" from (select $1::bigint as "id", $2::bigint as "n" union all select $3, $4 * 1.5) as "v" where "amounts"."id" = "v"."id" - unsupported binary operator: <anyelement> * <decimal> (desired <int>)'
+            );
+            expect(rows).to.eql([{ n: '0.00' }, { n: '0.00' }]);
+          } else {
+            expect(error).to.equal(undefined);
+            expect(rows).to.eql([{ n: '10.00' }, { n: '10.50' }]);
+          }
+        });
+
+        it("rejects a value too long for a varchar column resolved with 'from_db', as .update() does", async function () {
+          if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+            return this.skip();
+          }
+          await knex.schema.dropTableIfExists('codes');
+          await knex.raw(
+            'create table codes (id integer primary key, label varchar(5))'
+          );
+          await knex('codes').insert({ id: 1, label: 'old' });
+
+          let error;
+          try {
+            await knex.batchUpdate(
+              'codes',
+              [{ id: 1, label: 'abcdefgh' }],
+              'id',
+              { mode: 'union', columnTypes: 'from_db' }
+            );
+          } catch (caught) {
+            error = caught;
+          }
+          const rows = await knex('codes').select('label');
+          await knex.schema.dropTableIfExists('codes');
+          expect(error.message).to.equal(
+            isCockroachDB(knex)
+              ? 'update "codes" set "label" = "v"."label" from (select $1::"pg_catalog"."int8" as "id", $2::"pg_catalog"."varchar" as "label") as "v" where "codes"."id" = "v"."id" - value too long for type VARCHAR(5)'
+              : 'update "codes" set "label" = "v"."label" from (select $1::"pg_catalog"."int4" as "id", $2::"pg_catalog"."varchar" as "label") as "v" where "codes"."id" = "v"."id" - value too long for type character varying(5)'
+          );
+          expect(rows).to.eql([{ label: 'old' }]);
+        });
+
+        it("writes raw values in 'union' and 'case' mode as .update() does", async function () {
+          if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+            return this.skip();
+          }
+          await knex.batchUpdate(
+            'members',
+            [
+              { id: 1, age: knex.raw('40 + 2') },
+              { id: 2, age: 7 },
+            ],
+            'id',
+            { mode: 'union' }
+          );
+          await knex.batchUpdate(
+            'members',
+            [{ id: 2, age: knex.raw('?? + 1', ['age']) }],
+            'id',
+            { mode: 'case' }
+          );
+
+          const rows = await knex('members').orderBy('id');
+          if (isCockroachDB(knex)) {
+            // CockroachDB's integer is int8, which pg returns as a string.
+            expect(rows).to.eql([
+              { id: '1', name: 'old1', age: '42' },
+              { id: '2', name: 'old2', age: '8' },
+              { id: '3', name: 'decoy', age: '99' },
+            ]);
+          } else {
+            expect(rows).to.eql([
+              { id: 1, name: 'old1', age: 42 },
+              { id: 2, name: 'old2', age: 8 },
+              { id: 3, name: 'decoy', age: 99 },
+            ]);
+          }
         });
 
         it('returns the requested columns on postgres-family dialects', async function () {
@@ -1025,10 +1380,12 @@ describe('Updates', function () {
           const result = await knex
             .batchUpdate('members', [{ id: 1, name: 'ret', age: 5 }])
             .returning(['id', 'name']);
-          expect(result.length).to.equal(1);
-          expect(result[0].name).to.equal('ret');
-          // CockroachDB returns INT columns as strings
-          assertNumber(knex, result[0].id, 1);
+          if (isCockroachDB(knex)) {
+            // CockroachDB's integer is int8, which pg returns as a string.
+            expect(result).to.eql([{ id: '1', name: 'ret' }]);
+          } else {
+            expect(result).to.eql([{ id: 1, name: 'ret' }]);
+          }
         });
 
         it('updates across multiple chunks', async function () {
@@ -1049,7 +1406,18 @@ describe('Updates', function () {
           const rows = await knex('members')
             .whereIn('id', [1, 2])
             .orderBy('id');
-          expect(rows.map((r) => r.name)).to.eql(['c1', 'c2']);
+          if (isCockroachDB(knex)) {
+            // CockroachDB's integer is int8, which pg returns as a string.
+            expect(rows).to.eql([
+              { id: '1', name: 'c1', age: '100' },
+              { id: '2', name: 'c2', age: '200' },
+            ]);
+          } else {
+            expect(rows).to.eql([
+              { id: 1, name: 'c1', age: 100 },
+              { id: 2, name: 'c2', age: 200 },
+            ]);
+          }
         });
 
         it('runs ceil(rows / chunkSize) set-based statements', async function () {
@@ -1104,14 +1472,20 @@ describe('Updates', function () {
           );
 
           const rows = await knex('memberships').orderBy(['tenant', 'id']);
-          // Number() coerces CockroachDB's int-as-string columns.
-          expect(
-            rows.map((r) => [Number(r.tenant), Number(r.id), r.name])
-          ).to.eql([
-            [7, 1, 'A'],
-            [7, 2, 'B'],
-            [8, 1, 'other-tenant'], // same id, different tenant — untouched
-          ]);
+          if (isCockroachDB(knex)) {
+            // CockroachDB's integer is int8, which pg returns as a string.
+            expect(rows).to.eql([
+              { tenant: '7', id: '1', name: 'A' },
+              { tenant: '7', id: '2', name: 'B' },
+              { tenant: '8', id: '1', name: 'other-tenant' }, // same id, different tenant — untouched
+            ]);
+          } else {
+            expect(rows).to.eql([
+              { tenant: 7, id: 1, name: 'A' },
+              { tenant: 7, id: 2, name: 'B' },
+              { tenant: 8, id: 1, name: 'other-tenant' }, // same id, different tenant — untouched
+            ]);
+          }
           await knex.schema.dropTableIfExists('memberships');
         });
 
@@ -1126,7 +1500,13 @@ describe('Updates', function () {
           ).to.be.rejectedWith(Error, /^force rollback$/);
 
           const row = await knex('members').where('id', 1).first();
-          expect(row.name).to.equal('old1'); // rollback reverted the update
+          // rollback reverted the update
+          if (isCockroachDB(knex)) {
+            // CockroachDB's integer is int8, which pg returns as a string.
+            expect(row).to.eql({ id: '1', name: 'old1', age: '1' });
+          } else {
+            expect(row).to.eql({ id: 1, name: 'old1', age: 1 });
+          }
         });
 
         it('validates the chunkSize parameter', function () {
@@ -1137,14 +1517,89 @@ describe('Updates', function () {
           ).to.throw('Invalid chunkSize: 0');
         });
 
-        it('keeps the last row when a key is duplicated (last-write-wins)', async function () {
-          await knex.batchUpdate('members', [
-            { id: 1, name: 'first', age: 1 },
-            { id: 1, name: 'last', age: 2 },
-          ]);
+        it('keeps the last row when a key is duplicated with onDuplicateKey: last', async function () {
+          await knex.batchUpdate(
+            'members',
+            [
+              { id: 1, name: 'first', age: 1 },
+              { id: 1, name: 'last', age: 2 },
+            ],
+            'id',
+            { onDuplicateKey: 'last' }
+          );
           const row = await knex('members').where('id', 1).first();
-          expect(row.name).to.equal('last');
-          assertNumber(knex, row.age, 2);
+          if (isCockroachDB(knex)) {
+            // CockroachDB's integer is int8, which pg returns as a string.
+            expect(row).to.eql({ id: '1', name: 'last', age: '2' });
+          } else {
+            expect(row).to.eql({ id: 1, name: 'last', age: 2 });
+          }
+        });
+
+        it('applies each row of a duplicated key in order, keeping a column the later row leaves undefined', async function () {
+          await knex.batchUpdate('members', [
+            { id: 1, name: 'first', age: 5 },
+            { id: 2, name: 'other', age: 7 },
+            { id: 1, name: 'second', age: undefined },
+          ]);
+          const rows = await knex('members')
+            .whereIn('id', [1, 2])
+            .orderBy('id');
+          if (isCockroachDB(knex)) {
+            // CockroachDB's integer is int8, which pg returns as a string.
+            expect(rows).to.eql([
+              { id: '1', name: 'second', age: '5' },
+              { id: '2', name: 'other', age: '7' },
+            ]);
+          } else {
+            expect(rows).to.eql([
+              { id: 1, name: 'second', age: 5 },
+              { id: 2, name: 'other', age: 7 },
+            ]);
+          }
+        });
+
+        it("runs a raw once per row of a duplicated key with mode: 'case'", async function () {
+          await knex.batchUpdate(
+            'members',
+            [
+              { id: 1, age: knex.raw('?? + 1', ['age']) },
+              { id: 1, age: knex.raw('?? + 1', ['age']) },
+            ],
+            'id',
+            { mode: 'case' }
+          );
+          const row = await knex('members').where('id', 1).first();
+          if (isCockroachDB(knex)) {
+            // CockroachDB's integer is int8, which pg returns as a string.
+            expect(row).to.eql({ id: '1', name: 'old1', age: '3' });
+          } else {
+            expect(row).to.eql({ id: 1, name: 'old1', age: 3 });
+          }
+        });
+
+        it('returns one row per row of a duplicated key on postgres-family dialects', async function () {
+          if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+            return this.skip();
+          }
+          const result = await knex
+            .batchUpdate('members', [
+              { id: 1, name: 'a', age: 5 },
+              { id: 1, name: 'b', age: 6 },
+            ])
+            .returning(['id', 'name']);
+          if (isCockroachDB(knex)) {
+            // CockroachDB's integer is int8, which pg returns as a string.
+            expect(result).to.eql([
+              { id: '1', name: 'a' },
+              { id: '1', name: 'b' },
+            ]);
+          } else {
+            expect(result).to.eql([
+              { id: 1, name: 'a' },
+              { id: 1, name: 'b' },
+            ]);
+          }
         });
 
         it('throws on a duplicate key with onDuplicateKey: throw', function () {
@@ -1196,7 +1651,12 @@ describe('Updates', function () {
             .where('name', 'capped')
             .count({ c: 'id' })
             .first();
-          expect(Number(updated.c)).to.equal(10);
+          if (isPgBased(knex)) {
+            // count() is a bigint, which pg returns as a string.
+            expect(updated.c).to.equal('10');
+          } else {
+            expect(updated.c).to.equal(10);
+          }
         });
 
         it("splits a union batch under SQLite's compound-SELECT term cap", async function () {
@@ -1236,7 +1696,320 @@ describe('Updates', function () {
             .where('name', 'big')
             .count({ c: 'id' })
             .first();
-          expect(Number(updated.c)).to.equal(600);
+          if (isPgBased(knex)) {
+            // count() is a bigint, which pg returns as a string.
+            expect(updated.c).to.equal('600');
+          } else {
+            expect(updated.c).to.equal(600);
+          }
+        });
+
+        it('splits a composite-key case batch into 50-row chunks on SQLite', async function () {
+          // One updated column takes the whole 50-branch case budget, so 1100
+          // rows run as ceil(1100 / 50) = 22 statements. A chunk that long also
+          // keeps the OR-joined WHERE under SQLite's expression depth: the
+          // default 1000-row chunk fails ("Expression tree is too large
+          // (maximum depth 1000)").
+          if (!isSQLite(knex)) {
+            return this.skip();
+          }
+          const rows = Array.from({ length: 1100 }, (_, i) => ({
+            id: i + 101,
+            name: `n${i + 101}`,
+            age: i,
+          }));
+          await knex.batchInsert('members', rows, 100);
+          const statements = [];
+          const onQuery = (query) => {
+            if (/^\s*update\s/i.test(query.sql)) {
+              statements.push(query.sql);
+            }
+          };
+          knex.on('query', onQuery);
+          try {
+            await knex.batchUpdate(
+              'members',
+              rows.map((r) => ({ ...r, name: 'deep' })),
+              ['id', 'age'],
+              { mode: 'case' }
+            );
+          } finally {
+            knex.off('query', onQuery);
+          }
+
+          expect(statements).to.have.lengthOf(22);
+          const updated = await knex('members')
+            .where('name', 'deep')
+            .count({ c: 'id' })
+            .first();
+          if (isPgBased(knex)) {
+            // count() is a bigint, which pg returns as a string.
+            expect(updated.c).to.equal('1100');
+          } else {
+            expect(updated.c).to.equal(1100);
+          }
+        });
+
+        it('sizes a single-key case chunk by its column count on SQLite', async function () {
+          // name and age share the 50-branch case budget, 25 rows each, so
+          // 1100 rows run as 1100 / 25 = 44 statements.
+          if (!isSQLite(knex)) {
+            return this.skip();
+          }
+          const rows = Array.from({ length: 1100 }, (_, i) => ({
+            id: i + 101,
+            name: `n${i + 101}`,
+            age: i,
+          }));
+          await knex.batchInsert('members', rows, 100);
+          const statements = [];
+          const onQuery = (query) => {
+            if (/^\s*update\s/i.test(query.sql)) {
+              statements.push(query.sql);
+            }
+          };
+          knex.on('query', onQuery);
+          try {
+            await knex.batchUpdate(
+              'members',
+              rows.map((r) => ({ ...r, name: 'flat' })),
+              'id',
+              { mode: 'case' }
+            );
+          } finally {
+            knex.off('query', onQuery);
+          }
+
+          expect(statements).to.have.lengthOf(44);
+          const updated = await knex('members')
+            .where('name', 'flat')
+            .count({ c: 'id' })
+            .first();
+          if (isPgBased(knex)) {
+            // count() is a bigint, which pg returns as a string.
+            expect(updated.c).to.equal('1100');
+          } else {
+            expect(updated.c).to.equal(1100);
+          }
+        });
+
+        it('runs a case batch fastest at the shipped SQLite chunk', async function () {
+          // Pins the measurement behind CASE_BRANCH_BUDGET
+          // (scripts/batch-update-benchmark.md#sqlite-case-chunk-size): for 2 keys
+          // × 10 columns the shipped 5-row chunk beats a 50-row chunk in CPU time.
+          // A 1-row chunk wins or loses depending on the run, so it isn't pinned.
+          // If a SQLite release changes how it evaluates CASE, this fails: re-run
+          // the benchmark and move the budget.
+          if (!isSQLite(knex)) {
+            return this.skip();
+          }
+          const columns = Array.from({ length: 10 }, (_, i) => `c${i}`);
+          await knex.schema.dropTableIfExists('case_chunk_timing');
+          await knex.schema.createTable('case_chunk_timing', (table) => {
+            table.integer('k0');
+            table.integer('k1');
+            for (const column of columns) {
+              table.string(column);
+            }
+            table.primary(['k0', 'k1']);
+          });
+          const buildRows = (label) =>
+            Array.from({ length: 1000 }, (_, id) => ({
+              k0: id,
+              k1: 1,
+              ...Object.fromEntries(columns.map((c) => [c, `${label}-${id}`])),
+            }));
+          await knex.batchInsert('case_chunk_timing', buildRows('seed'), 40);
+          expect(knex.client.batchUpdateRowLimit('case', 2, 10)).to.equal(5);
+          const medianCpuMs = async (cap) => {
+            knex.client.batchUpdateRowLimit = () => cap;
+            const samples = [];
+            try {
+              for (let run = 0; run < 5; run++) {
+                const updates = buildRows(`${cap}-${run}`);
+                const cpuStart = process.cpuUsage();
+                await knex.batchUpdate(
+                  'case_chunk_timing',
+                  updates,
+                  ['k0', 'k1'],
+                  {
+                    mode: 'case',
+                  }
+                );
+                const cpu = process.cpuUsage(cpuStart);
+                samples.push(cpu.user + cpu.system);
+              }
+            } finally {
+              delete knex.client.batchUpdateRowLimit;
+            }
+            return samples.sort((a, b) => a - b)[2] / 1000;
+          };
+
+          const shippedMs = await medianCpuMs(5);
+          const fiftyRowMs = await medianCpuMs(50);
+          await knex.schema.dropTableIfExists('case_chunk_timing');
+
+          expect(shippedMs).to.be.below(fiftyRowMs);
+        });
+
+        it('splits a composite-key case batch into 50-row chunks on PostgreSQL', async function () {
+          // A composite key stops the chunk at 50 rows whatever the column count,
+          // so 1100 rows run as ceil(1100 / 50) = 22 statements.
+          if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+            return this.skip();
+          }
+          const rows = Array.from({ length: 1100 }, (_, i) => ({
+            id: i + 101,
+            name: `n${i + 101}`,
+            age: i,
+          }));
+          await knex.batchInsert('members', rows, 100);
+          const statements = [];
+          const onQuery = (query) => {
+            if (/^\s*update\s/i.test(query.sql)) {
+              statements.push(query.sql);
+            }
+          };
+          knex.on('query', onQuery);
+          try {
+            await knex.batchUpdate(
+              'members',
+              rows.map((r) => ({ ...r, name: 'deep' })),
+              ['id', 'age'],
+              { mode: 'case' }
+            );
+          } finally {
+            knex.off('query', onQuery);
+          }
+
+          expect(statements).to.have.lengthOf(22);
+          const updated = await knex('members')
+            .where('name', 'deep')
+            .count({ c: 'id' })
+            .first();
+          if (isPgBased(knex)) {
+            // count() is a bigint, which pg returns as a string.
+            expect(updated.c).to.equal('1100');
+          } else {
+            expect(updated.c).to.equal(1100);
+          }
+        });
+
+        it('caps a single-key case chunk at 250 rows on PostgreSQL', async function () {
+          // The cap doesn't shrink with the column count, so 1100 rows of name
+          // and age run as ceil(1100 / 250) = 5 statements.
+          if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+            return this.skip();
+          }
+          const rows = Array.from({ length: 1100 }, (_, i) => ({
+            id: i + 101,
+            name: `n${i + 101}`,
+            age: i,
+          }));
+          await knex.batchInsert('members', rows, 100);
+          const statements = [];
+          const onQuery = (query) => {
+            if (/^\s*update\s/i.test(query.sql)) {
+              statements.push(query.sql);
+            }
+          };
+          knex.on('query', onQuery);
+          try {
+            await knex.batchUpdate(
+              'members',
+              rows.map((r) => ({ ...r, name: 'flat' })),
+              'id',
+              { mode: 'case' }
+            );
+          } finally {
+            knex.off('query', onQuery);
+          }
+
+          expect(statements).to.have.lengthOf(5);
+          const updated = await knex('members')
+            .where('name', 'flat')
+            .count({ c: 'id' })
+            .first();
+          if (isPgBased(knex)) {
+            // count() is a bigint, which pg returns as a string.
+            expect(updated.c).to.equal('1100');
+          } else {
+            expect(updated.c).to.equal(1100);
+          }
+        });
+
+        it('runs a composite-key case batch fastest at the shipped PostgreSQL chunk', async function () {
+          // Pins the measurement behind COMPOSITE_CASE_ROWS
+          // (scripts/batch-update-benchmark.md#postgresql-case-chunk-size): for
+          // 2 keys × 1 column the shipped 50-row chunk beats both a 5-row and a
+          // 1000-row chunk in wall time. If a PostgreSQL release changes how it
+          // plans the OR-joined WHERE, this fails: re-run the benchmark and move
+          // the cap.
+          if (!isPostgreSQL(knex)) {
+            return this.skip();
+          }
+          await knex.schema.dropTableIfExists('case_chunk_timing');
+          await knex.schema.createTable('case_chunk_timing', (table) => {
+            table.integer('k0');
+            table.integer('k1');
+            table.string('c0');
+            table.primary(['k0', 'k1']);
+          });
+          const buildRows = (label, length) =>
+            Array.from({ length }, (_, id) => ({
+              k0: id,
+              k1: 1,
+              c0: `${label}-${id}`,
+            }));
+          await knex.batchInsert(
+            'case_chunk_timing',
+            buildRows('seed', 10000),
+            500
+          );
+          // The cost this pins is planning a BitmapOr of one index scan per OR
+          // term, the plan PostgreSQL picks once the table's statistics show it
+          // far larger than the chunk. On a table only twice the chunk's size it
+          // flips to a seq scan whenever autovacuum re-analyzes it.
+          await knex.raw('analyze case_chunk_timing');
+          // Opens the connection and warms the catalog caches, which would
+          // otherwise land on whichever cap runs first.
+          await knex.batchUpdate(
+            'case_chunk_timing',
+            buildRows('warm-up', 2000),
+            ['k0', 'k1'],
+            { mode: 'case' }
+          );
+          expect(knex.client.batchUpdateRowLimit('case', 2, 1)).to.equal(50);
+          const medianWallMs = async (cap) => {
+            knex.client.batchUpdateRowLimit = () => cap;
+            const samples = [];
+            try {
+              for (let run = 0; run < 3; run++) {
+                const updates = buildRows(`${cap}-${run}`, 2000);
+                const wallStart = process.hrtime.bigint();
+                await knex.batchUpdate(
+                  'case_chunk_timing',
+                  updates,
+                  ['k0', 'k1'],
+                  {
+                    mode: 'case',
+                  }
+                );
+                samples.push(Number(process.hrtime.bigint() - wallStart) / 1e6);
+              }
+            } finally {
+              delete knex.client.batchUpdateRowLimit;
+            }
+            return samples.sort((a, b) => a - b)[1];
+          };
+
+          const fiveRowMs = await medianWallMs(5);
+          const shippedMs = await medianWallMs(50);
+          const thousandRowMs = await medianWallMs(1000);
+          await knex.schema.dropTableIfExists('case_chunk_timing');
+
+          expect(shippedMs).to.be.below(fiveRowMs);
+          expect(shippedMs).to.be.below(thousandRowMs);
         });
 
         // Large-batch correctness for every mode. These sizes cross each
@@ -1269,7 +2042,12 @@ describe('Updates', function () {
               .where('name', 'like', 'new%')
               .count({ c: 'id' })
               .first();
-            expect(Number(updated.c)).to.equal(SCALE_ROWS);
+            if (isPgBased(knex)) {
+              // count() is a bigint, which pg returns as a string.
+              expect(updated.c).to.equal(String(SCALE_ROWS));
+            } else {
+              expect(updated.c).to.equal(SCALE_ROWS);
+            }
           };
 
           it('union updates every row across many chunks', async function () {
@@ -1346,15 +2124,129 @@ describe('Updates', function () {
             await knex.batchUpdate('blobs', updates, 'id', { mode });
 
             const rows = await knex('blobs').orderBy('id');
-            expect(rows.map((r) => r.label)).to.eql(['a', 'b']);
-            expect(Buffer.from(rows[0].data).equals(updates[0].data)).to.equal(
-              true
-            );
-            expect(Buffer.from(rows[1].data).equals(updates[1].data)).to.equal(
-              true
-            );
+            if (isCockroachDB(knex)) {
+              // CockroachDB's integer is int8, which pg returns as a string.
+              expect(rows).to.eql([
+                { id: '1', label: 'a', data: updates[0].data },
+                { id: '2', label: 'b', data: updates[1].data },
+              ]);
+            } else {
+              expect(rows).to.eql([
+                { id: 1, label: 'a', data: updates[0].data },
+                { id: 2, label: 'b', data: updates[1].data },
+              ]);
+            }
           });
         }
+
+        it("stores a Uint8Array as bytes in 'json' mode", async function () {
+          if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+            return this.skip();
+          }
+          await knex.batchUpdate(
+            'blobs',
+            [{ id: 1, label: 'a', data: new Uint8Array([120, 121]) }],
+            'id',
+            { mode: 'json' }
+          );
+
+          const rows = await knex('blobs').orderBy('id');
+          if (isCockroachDB(knex)) {
+            // CockroachDB's integer is int8, which pg returns as a string.
+            expect(rows).to.eql([
+              { id: '1', label: 'a', data: Buffer.from('xy') },
+              { id: '2', label: 'seed', data: Buffer.from('seed-2') },
+            ]);
+          } else {
+            expect(rows).to.eql([
+              { id: 1, label: 'a', data: Buffer.from('xy') },
+              { id: 2, label: 'seed', data: Buffer.from('seed-2') },
+            ]);
+          }
+        });
+
+        it("updates rows keyed by a Buffer in 'json' mode", async function () {
+          if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+            return this.skip();
+          }
+          await knex.schema.dropTableIfExists('tokens');
+          await knex.raw('drop type if exists token_label');
+          await knex.raw(
+            "create type token_label as enum ('old', 'new', 'decoy')"
+          );
+          await knex.raw(
+            'create table tokens (token bytea primary key, label token_label)'
+          );
+          await knex('tokens').insert([
+            { token: Buffer.from('aa', 'hex'), label: 'old' },
+            { token: Buffer.from('bb', 'hex'), label: 'decoy' },
+          ]);
+
+          await knex.batchUpdate(
+            'tokens',
+            [{ token: Buffer.from('aa', 'hex'), label: 'new' }],
+            'token',
+            { mode: 'json' }
+          );
+
+          const rows = await knex('tokens').orderBy('token');
+          await knex.schema.dropTableIfExists('tokens');
+          await knex.raw('drop type token_label');
+          expect(rows).to.eql([
+            { token: Buffer.from('aa', 'hex'), label: 'new' },
+            { token: Buffer.from('bb', 'hex'), label: 'decoy' },
+          ]);
+        });
+
+        it('json mode auto-splits a blob update keyed by a uuid', async function () {
+          if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+            return this.skip();
+          }
+          await knex.schema.dropTableIfExists('files');
+          await knex.raw(
+            'create table files (id uuid primary key, label text, data bytea)'
+          );
+          await knex('files').insert([
+            {
+              id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+              label: 'old',
+              data: Buffer.from('old'),
+            },
+            {
+              id: 'b1ffcd00-0d1c-4ef8-bb6d-6bb9bd380a22',
+              label: 'decoy',
+              data: Buffer.from('decoy'),
+            },
+          ]);
+
+          await knex.batchUpdate(
+            'files',
+            [
+              {
+                id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+                label: 'new',
+                data: Buffer.from('new'),
+              },
+            ],
+            'id',
+            { mode: 'json' }
+          );
+
+          const rows = await knex('files').orderBy('id');
+          await knex.schema.dropTableIfExists('files');
+          expect(rows).to.eql([
+            {
+              id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+              label: 'new',
+              data: Buffer.from('new'),
+            },
+            {
+              id: 'b1ffcd00-0d1c-4ef8-bb6d-6bb9bd380a22',
+              label: 'decoy',
+              data: Buffer.from('decoy'),
+            },
+          ]);
+        });
 
         it('json mode auto-splits: json for the label, union/per-row for the blob', async function () {
           // json can't carry a Buffer, so the executor updates `label` with a
@@ -1371,13 +2263,18 @@ describe('Updates', function () {
           });
 
           const rows = await knex('blobs').orderBy('id');
-          expect(rows.map((r) => r.label)).to.eql(['json-1', 'json-2']);
-          expect(Buffer.from(rows[0].data).equals(updates[0].data)).to.equal(
-            true
-          );
-          expect(Buffer.from(rows[1].data).equals(updates[1].data)).to.equal(
-            true
-          );
+          if (isCockroachDB(knex)) {
+            // CockroachDB's integer is int8, which pg returns as a string.
+            expect(rows).to.eql([
+              { id: '1', label: 'json-1', data: updates[0].data },
+              { id: '2', label: 'json-2', data: updates[1].data },
+            ]);
+          } else {
+            expect(rows).to.eql([
+              { id: 1, label: 'json-1', data: updates[0].data },
+              { id: 2, label: 'json-2', data: updates[1].data },
+            ]);
+          }
         });
       });
     });

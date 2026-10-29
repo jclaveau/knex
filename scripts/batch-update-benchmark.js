@@ -134,20 +134,23 @@ function measureStatement(knex, columns, rows, mode, columnTypes) {
   return { sqlBytes: compiled.sql.length, params: compiled.bindings.length };
 }
 
+// timeExecution passes no chunkSize, so the executor chunks at its default.
+const DEFAULT_CHUNK_SIZE = 1000;
+
 function chunksNeeded(knex, columns, rows, mode) {
   const limit = knex.client.maxBindParameters || Infinity;
-  if (mode === 'json') {
-    return 1; // one parameter per chunk regardless of row count
-  }
   const perRow =
-    mode === 'case'
+    mode === 'json'
+      ? 0 // one parameter per chunk regardless of row count
+      : mode === 'case'
       ? columns.length * 2 + 1 // each column matches the row's key, plus the WHERE key
       : columns.length + 1; // union: one value per cell (key + columns)
-  // Mirror the executor: the tighter of the bind-parameter cap and any
-  // structural per-statement row cap (e.g. SQLite's compound-SELECT limit).
+  // Mirror the executor: the tightest of chunkSize, the bind-parameter cap and
+  // any structural per-statement row cap (e.g. SQLite's compound-SELECT limit).
   const maxRows = Math.min(
-    Math.max(1, Math.floor(limit / perRow)),
-    knex.client.batchUpdateRowLimit(mode)
+    DEFAULT_CHUNK_SIZE,
+    perRow > 0 ? Math.max(1, Math.floor(limit / perRow)) : Infinity,
+    knex.client.batchUpdateRowLimit(mode, 1, columns.length)
   );
   return Math.ceil(rows.length / maxRows);
 }
@@ -278,6 +281,121 @@ async function benchBlobs(knex) {
   await knex.schema.dropTableIfExists('bench_blobs');
 }
 
+// Picks the row cap for a 'case' chunk (each dialect's batchUpdateRowLimit).
+// Each updated row walks every column's CASE list, so a statement costs about
+// rows × columns × chunk and a smaller chunk is cheaper until the per-statement
+// overhead takes over. Times every cap on each key × column shape, as the median
+// of `runs` runs: process CPU ms on SQLite (in-process, so it covers the engine
+// too), wall ms on a server dialect, whose work runs outside this process.
+// CockroachDB reports the postgresql dialect, so it takes the same sweep.
+const CASE_CHUNK_SWEEPS = {
+  sqlite3: {
+    caps: [1, 2, 5, 10, 20, 50, 100],
+    rows: 2000,
+    runs: 5,
+    keyCounts: [1, 2, 3],
+    columnCounts: [1, 3, 10, 20],
+    metric: 'CPU',
+  },
+  postgresql: {
+    caps: [5, 10, 25, 50, 100, 250, 500, 1000],
+    rows: 10000,
+    runs: 3,
+    keyCounts: [1, 2],
+    columnCounts: [1, 3, 10],
+    metric: 'wall',
+  },
+};
+
+async function benchCaseChunkSize(knex) {
+  const sweep = CASE_CHUNK_SWEEPS[knex.client.dialect];
+  if (!sweep) {
+    return;
+  }
+  console.log(
+    `\n## ${knex.client.config.client} case chunk size ` +
+      `(${sweep.rows} rows, median ${sweep.metric} ms of ${sweep.runs} runs)\n`
+  );
+  console.log(`| keys | cols | ${sweep.caps.join(' | ')} | shipped cap |`);
+  console.log(`|---:|---:|${sweep.caps.map(() => '---:|').join('')}---:|`);
+  for (const keyCount of sweep.keyCounts) {
+    for (const colCount of sweep.columnCounts) {
+      const keyColumns = Array.from({ length: keyCount }, (_, i) => `k${i}`);
+      const columns = Array.from({ length: colCount }, (_, i) => `c${i}`);
+      const buildRows = (label) =>
+        Array.from({ length: sweep.rows }, (_, id) => {
+          const row = {};
+          for (const [index, column] of keyColumns.entries()) {
+            row[column] = index === 0 ? id : 1;
+          }
+          for (const column of columns) {
+            row[column] = `${column}-${label}-${id}`;
+          }
+          return row;
+        });
+      const shippedCap = knex.client.batchUpdateRowLimit(
+        'case',
+        keyCount,
+        colCount
+      );
+      const cells = [];
+      for (const cap of sweep.caps) {
+        // A fresh, analyzed table and one discarded run per cap: on one shared
+        // table the dead rows of earlier caps slow the later ones (on
+        // PostgreSQL 2 keys × 1 column at cap 1000 took 5820 ms after the small
+        // caps vs 1911 ms run first).
+        await knex.schema.dropTableIfExists('bench_case');
+        await knex.schema.createTable('bench_case', (table) => {
+          for (const column of keyColumns) {
+            table.integer(column);
+          }
+          for (const column of columns) {
+            table.string(column);
+          }
+          table.primary(keyColumns);
+        });
+        await knex.batchInsert(
+          'bench_case',
+          buildRows('seed'),
+          Math.floor(500 / (keyCount + colCount))
+        );
+        await knex.raw('analyze ??', ['bench_case']);
+        knex.client.batchUpdateRowLimit = () => cap;
+        await knex.batchUpdate(
+          'bench_case',
+          buildRows(`warm-${cap}`),
+          keyColumns,
+          {
+            mode: 'case',
+            chunkSize: sweep.rows,
+          }
+        );
+        const samples = [];
+        for (let run = 0; run < sweep.runs; run++) {
+          const updates = buildRows(`${cap}-${run}`);
+          const cpuStart = process.cpuUsage();
+          const wallStart = process.hrtime.bigint();
+          await knex.batchUpdate('bench_case', updates, keyColumns, {
+            mode: 'case',
+            chunkSize: sweep.rows,
+          });
+          const wallMs = Number(process.hrtime.bigint() - wallStart) / 1e6;
+          const cpu = process.cpuUsage(cpuStart);
+          const cpuMs = (cpu.user + cpu.system) / 1000;
+          samples.push(sweep.metric === 'CPU' ? cpuMs : wallMs);
+        }
+        delete knex.client.batchUpdateRowLimit;
+        samples.sort((a, b) => a - b);
+        cells.push(samples[Math.floor(samples.length / 2)].toFixed(0));
+      }
+      console.log(
+        `| ${keyCount} | ${colCount} | ${cells.join(' | ')} | ${shippedCap} |`
+      );
+    }
+  }
+  await knex.schema.dropTableIfExists('bench_case');
+}
+
 async function run() {
   const dialect = (process.env.DB || process.argv[2] || 'sqlite3').match(
     /[\w-]+/g
@@ -343,6 +461,7 @@ async function run() {
   printResultsJson(dialect, results);
   await benchColumnTypes(knex);
   await benchBlobs(knex);
+  await benchCaseChunkSize(knex);
 
   await knex.destroy();
 }

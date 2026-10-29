@@ -44,7 +44,7 @@ describe('batchUpdate (db-less)', function () {
       .toSQL();
     expect(sql).to.equal(
       'update "users" set "name" = "v"."name", "age" = "v"."age" from ' +
-        '(select ?::numeric as "id", ?::text as "name", ?::numeric as "age" ' +
+        '(select ?::bigint as "id", ?::text as "name", ?::bigint as "age" ' +
         'union all select ?, ?, ?) as "v" where "users"."id" = "v"."id"'
     );
     expect(bindings).to.eql([1, 'a', 10, 2, 'b', 20]);
@@ -53,7 +53,7 @@ describe('batchUpdate (db-less)', function () {
   it('cockroachdb and redshift reuse the postgres FROM form', function () {
     const expected =
       'update "users" set "name" = "v"."name", "age" = "v"."age" from ' +
-      '(select ?::numeric as "id", ?::text as "name", ?::numeric as "age" ' +
+      '(select ?::bigint as "id", ?::text as "name", ?::bigint as "age" ' +
       'union all select ?, ?, ?) as "v" where "users"."id" = "v"."id"';
     expect(
       clients['cockroachdb']('users')
@@ -124,7 +124,7 @@ describe('batchUpdate (db-less)', function () {
         .toSQL().sql
     ).to.equal(
       'update "users" set "name" = "v"."name" from ' +
-        '(select ?::numeric as "tenant", ?::numeric as "id", ?::text as "name" ' +
+        '(select ?::bigint as "tenant", ?::bigint as "id", ?::text as "name" ' +
         'union all select ?, ?, ?) as "v" ' +
         'where "users"."tenant" = "v"."tenant" and "users"."id" = "v"."id"'
     );
@@ -172,12 +172,21 @@ describe('batchUpdate (db-less)', function () {
         ['flag', 'when', 'buf', 'doc', 'note']
       )
       .toSQL();
-    expect(sql).to.contain('?::numeric as "id"');
+    expect(sql).to.contain('?::bigint as "id"');
     expect(sql).to.contain('?::boolean as "flag"');
     expect(sql).to.contain('?::timestamptz as "when"');
     expect(sql).to.contain('?::bytea as "buf"');
     expect(sql).to.contain('?::jsonb as "doc"');
     expect(sql).to.contain('?::text as "note"');
+  });
+
+  it('casts a Uint8Array to bytea in a postgres union', function () {
+    const { sql } = clients['pg']('users')
+      .batchUpdate([{ id: 1, buf: new Uint8Array([120]) }], ['id'], ['buf'])
+      .toSQL();
+    expect(sql).to.equal(
+      'update "users" set "buf" = "v"."buf" from (select ?::bigint as "id", ?::bytea as "buf") as "v" where "users"."id" = "v"."id"'
+    );
   });
 
   it('resolves to an empty result for an empty batch', async function () {
@@ -204,12 +213,194 @@ describe('batchUpdate (db-less)', function () {
         ['n']
       )
       .toSQL().sql;
-    expect(inferred).to.contain('?::numeric as "n"');
+    expect(inferred).to.contain('?::bigint as "n"');
     // all-null column -> text fallback
     const allNull = clients['pg']('users')
       .batchUpdate([{ id: 1, n: null }], ['id'], ['n'])
       .toSQL().sql;
     expect(allNull).to.contain('?::text as "n"');
+  });
+
+  it('casts a number column holding a fraction to numeric (postgres)', function () {
+    expect(
+      clients['pg']('users')
+        .batchUpdate(
+          [
+            { id: 1, n: 1 },
+            { id: 2, n: 1.5 },
+          ],
+          ['id'],
+          ['n']
+        )
+        .toSQL().sql
+    ).to.equal(
+      'update "users" set "n" = "v"."n" from (select ?::bigint as "id", ?::numeric as "n" union all select ?, ?) as "v" where "users"."id" = "v"."id"'
+    );
+  });
+
+  it('casts the first bound value of a column led by a raw cell (postgres)', function () {
+    const knex = clients['pg'];
+    expect(
+      knex('users')
+        .batchUpdate(
+          [
+            { id: 1, age: knex.raw('40 + 2'), seen: knex.fn.now() },
+            { id: 2, age: 3, seen: new Date(0) },
+          ],
+          ['id'],
+          ['age', 'seen']
+        )
+        .toSQL()
+        .toNative()
+    ).to.eql({
+      sql: 'update "users" set "age" = "v"."age", "seen" = "v"."seen" from (select $1::bigint as "id", 40 + 2 as "age", CURRENT_TIMESTAMP as "seen" union all select $2, $3::bigint, $4::timestamptz) as "v" where "users"."id" = "v"."id"',
+      bindings: [1, 2, 3, new Date(0)],
+    });
+  });
+
+  it('types a raw cell from the bound values of later rows (postgres)', function () {
+    const knex = clients['pg'];
+    expect(
+      knex('users')
+        .batchUpdate(
+          [
+            { id: 1, n: knex.raw('1 + 1') },
+            { id: 2, n: 1.5 },
+          ],
+          ['id'],
+          ['n']
+        )
+        .toSQL()
+        .toNative()
+    ).to.eql({
+      sql: 'update "users" set "n" = "v"."n" from (select $1::bigint as "id", 1 + 1 as "n" union all select $2, $3::numeric) as "v" where "users"."id" = "v"."id"',
+      bindings: [1, 2, 1.5],
+    });
+  });
+
+  it('leaves a raw cell in a later row uncast (postgres)', function () {
+    const knex = clients['pg'];
+    expect(
+      knex('users')
+        .batchUpdate(
+          [
+            { id: 1, s: 'a' },
+            { id: 2, s: knex.raw('now()') },
+          ],
+          ['id'],
+          ['s']
+        )
+        .toSQL()
+        .toNative()
+    ).to.eql({
+      sql: 'update "users" set "s" = "v"."s" from (select $1::bigint as "id", $2::text as "s" union all select $3, now()) as "v" where "users"."id" = "v"."id"',
+      bindings: [1, 'a', 2],
+    });
+  });
+
+  it('casts a raw cell to its columnTypes entry (postgres)', function () {
+    const knex = clients['pg'];
+    expect(
+      knex('users')
+        .batchUpdate(
+          [
+            { id: 1, i: knex.raw("'4'") },
+            { id: 2, i: 5 },
+          ],
+          ['id'],
+          ['i'],
+          { i: 'integer' }
+        )
+        .toSQL()
+        .toNative()
+    ).to.eql({
+      sql: 'update "users" set "i" = "v"."i" from (select $1::bigint as "id", (\'4\')::integer as "i" union all select $2, $3) as "v" where "users"."id" = "v"."id"',
+      bindings: [1, 2, 5],
+    });
+  });
+
+  it('leaves a raw cell uncast where the cast is inferred (postgres)', function () {
+    const knex = clients['pg'];
+    expect(
+      knex('users')
+        .batchUpdate(
+          [
+            { id: 1, price: 10 },
+            { id: 2, price: knex.raw('? * 1.5', [7]) },
+          ],
+          ['id'],
+          ['price']
+        )
+        .toSQL()
+        .toNative()
+    ).to.eql({
+      sql: 'update "users" set "price" = "v"."price" from (select $1::bigint as "id", $2::bigint as "price" union all select $3, $4 * 1.5) as "v" where "users"."id" = "v"."id"',
+      bindings: [1, 10, 2, 7],
+    });
+  });
+
+  it('leaves a column of raw cells and nulls uncast (postgres)', function () {
+    const knex = clients['pg'];
+    expect(
+      knex('users')
+        .batchUpdate(
+          [
+            { id: 1, s: knex.raw('now()') },
+            { id: 2, s: null },
+          ],
+          ['id'],
+          ['s']
+        )
+        .toSQL()
+        .toNative()
+    ).to.eql({
+      sql: 'update "users" set "s" = "v"."s" from (select $1::bigint as "id", now() as "s" union all select $2, $3) as "v" where "users"."id" = "v"."id"',
+      bindings: [1, 2, null],
+    });
+  });
+
+  it('leaves a null uncast before a raw cell of its column (postgres)', function () {
+    const knex = clients['pg'];
+    expect(
+      knex('users')
+        .batchUpdate(
+          [
+            { id: 1, age: null },
+            { id: 2, age: knex.raw('42') },
+          ],
+          ['id'],
+          ['age']
+        )
+        .toSQL()
+        .toNative()
+    ).to.eql({
+      sql: 'update "users" set "age" = "v"."age" from (select $1::bigint as "id", $2 as "age" union all select $3, 42) as "v" where "users"."id" = "v"."id"',
+      bindings: [1, null, 2],
+    });
+  });
+
+  it('compiles a function value as an uncast subquery (postgres)', function () {
+    expect(
+      clients['pg']('users')
+        .batchUpdate(
+          [
+            {
+              id: 1,
+              name: function () {
+                this.select('x').from('y');
+              },
+            },
+            { id: 2, name: 'b' },
+          ],
+          ['id'],
+          ['name']
+        )
+        .toSQL()
+        .toNative()
+    ).to.eql({
+      sql: 'update "users" set "name" = "v"."name" from (select $1::bigint as "id", (select "x" from "y") as "name" union all select $2, $3::text) as "v" where "users"."id" = "v"."id"',
+      bindings: [1, 2, 'b'],
+    });
   });
 
   it('infers bigint and honors the columnTypes override (postgres)', function () {
@@ -232,6 +423,52 @@ describe('batchUpdate (db-less)', function () {
           .toSQL()
       ).to.throw(/returning\(\) is not supported/);
     }
+  });
+
+  it('refuses .returning() on an empty batch as on a non-empty one', async function () {
+    let sqliteError;
+    try {
+      await clients['sqlite3'].batchUpdate('users', []).returning('id');
+    } catch (caught) {
+      sqliteError = caught;
+    }
+    let caseError;
+    try {
+      await clients['pg']
+        .batchUpdate('users', [], 'id', { mode: 'case' })
+        .returning('id');
+    } catch (caught) {
+      caseError = caught;
+    }
+    expect(sqliteError.message).to.equal(
+      '.batchUpdate().returning() is not supported for sqlite3'
+    );
+    expect(caseError.message).to.equal(
+      ".batchUpdate().returning() is not supported with mode 'case'"
+    );
+    expect(await clients['pg'].batchUpdate('users', []).returning('id')).to.eql(
+      []
+    );
+  });
+
+  it("throws for .returning() in 'json' mode on sqlite3", function () {
+    expect(() =>
+      clients['sqlite3']('users')
+        .batchUpdate(
+          [{ id: 1, name: 'a' }],
+          ['id'],
+          ['name'],
+          undefined,
+          'json'
+        )
+        .returning(['id'])
+        .toSQL()
+    )
+      .to.throw(Error)
+      .with.property(
+        'message',
+        '.batchUpdate().returning() is not supported for sqlite3'
+      );
   });
 
   describe("mode: 'case'", function () {
@@ -289,13 +526,18 @@ describe('batchUpdate (db-less)', function () {
       expect(sql).to.contain('select @@rowcount');
     });
 
-    it('rejects .returning() (union only)', function () {
+    it('rejects .returning()', function () {
       expect(() =>
         clients['pg']('users')
           .batchUpdate(rows, ['id'], ['name'], undefined, 'case')
           .returning(['id'])
           .toSQL()
-      ).to.throw(/only supported with mode 'union'/);
+      )
+        .to.throw(Error)
+        .with.property(
+          'message',
+          ".batchUpdate().returning() is not supported with mode 'case'"
+        );
     });
   });
 
@@ -617,7 +859,7 @@ describe('batchUpdate (db-less)', function () {
           ],
           ['id'],
           'last'
-        ).columns
+        )[0].columns
       ).to.eql(['name']);
     });
 
@@ -664,7 +906,34 @@ describe('batchUpdate (db-less)', function () {
           ['tenant', 'id'],
           'last'
         )
-      ).to.eql({ columns: ['name'], rows: [{ tenant: 1n, id: 2, name: 'b' }] });
+      ).to.eql([
+        { columns: ['name'], rows: [{ tenant: 1n, id: 2, name: 'b' }] },
+      ]);
+    });
+
+    it("splits duplicate keys into rounds in batch order with onDuplicateKey: 'each'", function () {
+      expect(
+        prepareBatch(
+          [
+            { id: 1, a: 5, b: 1 },
+            { id: 2, a: 7, b: 3 },
+            { id: 1, a: undefined, b: 2 },
+            { id: 1, a: 6, b: 4 },
+          ],
+          ['id'],
+          'each'
+        )
+      ).to.eql([
+        {
+          columns: ['a', 'b'],
+          rows: [
+            { id: 1, a: 5, b: 1 },
+            { id: 2, a: 7, b: 3 },
+          ],
+        },
+        { columns: ['b'], rows: [{ id: 1, a: undefined, b: 2 }] },
+        { columns: ['a', 'b'], rows: [{ id: 1, a: 6, b: 4 }] },
+      ]);
     });
 
     it('names a duplicate composite key holding a bigint', function () {
@@ -681,7 +950,7 @@ describe('batchUpdate (db-less)', function () {
         .to.throw(Error)
         .with.property(
           'message',
-          `Invalid batch: duplicate key ["1",2] (use onDuplicateKey: 'last' to keep the last row instead)`
+          `Invalid batch: duplicate key ["1",2] (use onDuplicateKey: 'each' to apply every row in order)`
         );
     });
 
@@ -703,6 +972,254 @@ describe('batchUpdate (db-less)', function () {
       expect(() => clients['pg'].batchUpdate('users', 'nope')).to.throw(
         /Invalid batch/
       );
+    });
+
+    it('rejects an aliased table', function () {
+      expect(() =>
+        clients['pg'].batchUpdate('users as u', [{ id: 1, name: 'a' }])
+      )
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          'Invalid tableName: Expected a table name without an alias, got "users as u"'
+        );
+    });
+
+    it('rejects a raw table', function () {
+      const knex = clients['pg'];
+      expect(() => knex.batchUpdate(knex.raw('users'), [{ id: 1, name: 'a' }]))
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          'Invalid tableName: Expected a table name without an alias, got object'
+        );
+    });
+
+    it("rejects a raw value in 'json' mode", function () {
+      const knex = clients['pg'];
+      expect(() =>
+        knex.batchUpdate('users', [{ id: 1, seen: knex.fn.now() }], 'id', {
+          mode: 'json',
+        })
+      )
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          "Invalid batch: seen holds a raw value or a subquery; 'json' mode can't carry SQL, use mode 'case'"
+        );
+    });
+
+    it("rejects a function value in 'json' mode", function () {
+      expect(() =>
+        clients['pg'].batchUpdate(
+          'users',
+          [
+            {
+              id: 1,
+              name: function () {
+                this.select('x').from('y');
+              },
+            },
+          ],
+          'id',
+          { mode: 'json' }
+        )
+      )
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          "Invalid batch: name holds a raw value or a subquery; 'json' mode can't carry SQL, use mode 'case'"
+        );
+    });
+
+    it("rejects a subquery value in 'json' mode", function () {
+      const knex = clients['sqlite3'];
+      expect(() =>
+        knex.batchUpdate(
+          'users',
+          [{ id: 1, age: knex('ages').max('age') }],
+          'id',
+          { mode: 'json' }
+        )
+      )
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          "Invalid batch: age holds a raw value or a subquery; 'json' mode can't carry SQL, use mode 'case'"
+        );
+    });
+    it("rejects a raw value nested in an array in 'json' mode", function () {
+      const knex = clients['pg'];
+      expect(() =>
+        knex.batchUpdate(
+          'users',
+          [{ id: 1, tags: [knex.raw('now()')] }],
+          'id',
+          {
+            mode: 'json',
+          }
+        )
+      )
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          "Invalid batch: tags holds a raw value or a subquery; 'json' mode can't carry SQL, use mode 'case'"
+        );
+    });
+
+    it("rejects a raw value nested in an object in 'json' mode", function () {
+      const knex = clients['pg'];
+      expect(() =>
+        knex.batchUpdate(
+          'users',
+          [{ id: 1, meta: { seen: { at: knex.fn.now() } } }],
+          'id',
+          { mode: 'json' }
+        )
+      )
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          "Invalid batch: meta holds a raw value or a subquery; 'json' mode can't carry SQL, use mode 'case'"
+        );
+    });
+    it("rejects a value whose toJSON returns a raw in 'json' mode", function () {
+      const knex = clients['pg'];
+      expect(() =>
+        knex.batchUpdate(
+          'users',
+          [{ id: 1, meta: { toJSON: () => knex.raw('now()') } }],
+          'id',
+          { mode: 'json' }
+        )
+      )
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          "Invalid batch: meta holds a raw value or a subquery; 'json' mode can't carry SQL, use mode 'case'"
+        );
+    });
+
+    it("binds a nested object through its toJSON in 'json' mode", async function () {
+      const knex = knexLib({ client: 'pg' });
+      const statements = [];
+      knex.client.acquireConnection = async () => ({ __knexUid: 'stub' });
+      knex.client.releaseConnection = async () => {};
+      knex.client._query = async (connection, query) => {
+        statements.push([query.sql, query.bindings]);
+        return query;
+      };
+      knex.client.processResponse = () => [];
+      await knex
+        .batchUpdate(
+          'users',
+          [{ id: 1, meta: { seen: { toJSON: () => 1 }, format: () => 'x' } }],
+          'id',
+          { mode: 'json' }
+        )
+        .transacting(knex);
+      expect(statements).to.eql([
+        [
+          'update "users" set "meta" = "v"."meta" from jsonb_populate_recordset(null::"users", $1) as "v" where "users"."id" = "v"."id"',
+          ['[{"id":1,"meta":{"seen":1}}]'],
+        ],
+      ]);
+    });
+
+    it("refuses a cyclic value in 'json' mode with the circular-structure error", async function () {
+      const knex = knexLib({ client: 'pg' });
+      knex.client.acquireConnection = async () => ({ __knexUid: 'stub' });
+      knex.client.releaseConnection = async () => {};
+      knex.client._query = async (connection, query) => query;
+      knex.client.processResponse = () => [];
+      const meta = {};
+      meta.self = meta;
+      let error;
+      try {
+        await knex
+          .batchUpdate('users', [{ id: 1, meta }], 'id', { mode: 'json' })
+          .transacting(knex);
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error.message).to.equal(
+        "Converting circular structure to JSON\n    --> starting at object with constructor 'Object'\n    --- property 'self' closes the circle"
+      );
+    });
+
+    it("names a missing column when 'json' reads the catalog for a Buffer column", async function () {
+      const knex = knexLib({ client: 'pg' });
+      knex.client.acquireConnection = async () => ({ __knexUid: 'stub' });
+      knex.client.releaseConnection = async () => {};
+      knex.client._query = async (connection, query) => query;
+      knex.client.processResponse = () => [];
+      knex.client.batchUpdateColumnTypesFromDb = async () => ({
+        id: '"pg_catalog"."int4"',
+      });
+      let error;
+      try {
+        await knex
+          .batchUpdate('users', [{ id: 1, avatar: Buffer.from('a') }], 'id', {
+            mode: 'json',
+          })
+          .transacting(knex);
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error.message).to.equal(
+        'Invalid batch: users has no column avatar'
+      );
+    });
+
+    it('rejects a null key', function () {
+      expect(() =>
+        prepareBatch(
+          [
+            { id: 1, name: 'a' },
+            { id: null, name: 'b' },
+          ],
+          ['id'],
+          'last'
+        )
+      )
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          'Invalid batch: key id is null in row 1; a key must match one row by equality'
+        );
+    });
+
+    it('rejects an undefined key', function () {
+      expect(() =>
+        prepareBatch(
+          [{ tenant: 1, id: undefined, name: 'a' }],
+          ['tenant', 'id'],
+          'last'
+        )
+      )
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          'Invalid batch: key id is undefined in row 0; a key must match one row by equality'
+        );
+    });
+
+    it('rejects a key column mixing JS types', function () {
+      expect(() =>
+        prepareBatch(
+          [
+            { id: 1, name: 'a' },
+            { id: '1', name: 'b' },
+          ],
+          ['id'],
+          'last'
+        )
+      )
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          'Invalid batch: key id holds both number and string values; pass one type so duplicate keys are found'
+        );
     });
 
     it("rejects a columnTypes map in 'json' mode on the postgres family", function () {
@@ -791,12 +1308,93 @@ describe('batchUpdate (db-less)', function () {
       ).to.throw(/Invalid columnTypes\.name/);
     });
 
+    it('rejects a type name followed by SQL', function () {
+      expect(() =>
+        clients['pg'].batchUpdate('users', rows, 'id', {
+          columnTypes: { name: 'boolean or true' },
+        })
+      )
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          'Invalid columnTypes.name: "boolean or true" is not a valid type name'
+        );
+      expect(() =>
+        clients['pg'].batchUpdate('users', rows, 'id', {
+          columnTypes: { name: 'text as id from users union all select 1' },
+        })
+      )
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          'Invalid columnTypes.name: "text as id from users union all select 1" is not a valid type name'
+        );
+    });
+
+    it('rejects a backslash inside a quoted type name', function () {
+      expect(() =>
+        clients['pg'].batchUpdate('users', rows, 'id', {
+          columnTypes: { name: '"a\\"."b"' },
+        })
+      )
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          'Invalid columnTypes.name: "\\"a\\\\\\".\\"b\\"" is not a valid type name'
+        );
+    });
+
+    it('accepts nvarchar(max) and varchar2(n char) column types', async function () {
+      const statements = [];
+      for (const [clientName, columnTypes] of [
+        ['mssql', { id: 'int', body: 'nvarchar(max)' }],
+        ['oracledb', { id: 'number', body: 'varchar2(10 char)' }],
+      ]) {
+        const knex = knexLib({ client: clientName });
+        knex.client.acquireConnection = async () => ({ __knexUid: 'stub' });
+        knex.client.releaseConnection = async () => {};
+        knex.client._query = async (connection, query) => {
+          statements.push(query.sql);
+          return query;
+        };
+        knex.client.processResponse = () => [];
+        await knex
+          .batchUpdate('users', [{ id: 1, body: 'x' }], 'id', {
+            mode: 'json',
+            columnTypes,
+          })
+          .transacting(knex);
+      }
+      expect(statements).to.eql([
+        "update [users] set [body] = [src].[body] from openjson(@p0) with ([id] int '$.id', [body] nvarchar(max) '$.body') as [src] where [users].[id] = [src].[id];select @@rowcount",
+        'merge into "users" "tgt" using (select * from json_table(to_clob(:1), \'$[*]\' columns ("id" number path \'$.id\', "body" varchar2(10 char) path \'$.body\'))) "v" on ("tgt"."id" = "v"."id") when matched then update set "tgt"."body" = "v"."body"',
+      ]);
+    });
+
+    it('rejects a type name behind more than one schema', function () {
+      expect(() =>
+        clients['pg'].batchUpdate('users', rows, 'id', {
+          columnTypes: { name: 'db.other.mood' },
+        })
+      )
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          'Invalid columnTypes.name: "db.other.mood" is not a valid type name'
+        );
+    });
+
     it('interpolates parameterized and array type names into the casts', function () {
       for (const type of [
         'text[]',
         'varchar(255)',
         'numeric(10, 2)',
         'timestamp(3) with time zone',
+        'time without time zone',
+        'double precision',
+        'character varying(255)',
+        'interval day to second(3)',
+        'bigint unsigned zerofill',
         '"public"."mood"[]',
       ]) {
         const { sql } = clients['pg']('users')
@@ -812,6 +1410,7 @@ describe('batchUpdate (db-less)', function () {
           id: 'integer',
           mood: 'USER-DEFINED',
         }),
+        customWrapIdentifier: (value) => value,
       };
       let error;
       try {
@@ -827,9 +1426,47 @@ describe('batchUpdate (db-less)', function () {
       );
     });
 
+    it("reads 'from_db' types under the wrapIdentifier column name", async function () {
+      const dialectClient = {
+        batchUpdateColumnTypesFromDb: async () => ({
+          user_id: '"pg_catalog"."int4"',
+          display_name: '"pg_catalog"."text"',
+        }),
+        customWrapIdentifier: (value) =>
+          ({ userId: 'user_id', displayName: 'display_name' }[value]),
+      };
+      expect(
+        await resolveColumnTypesFromDb(dialectClient, null, 'users', [
+          'userId',
+          'displayName',
+        ])
+      ).to.eql({
+        userId: '"pg_catalog"."int4"',
+        displayName: '"pg_catalog"."text"',
+      });
+    });
+
+    it("reads 'from_db' types under the column name postProcessResponse gives back", async function () {
+      const dialectClient = {
+        batchUpdateColumnTypesFromDb: async () => ({
+          id: 'integer',
+          firstName: 'varchar',
+        }),
+        customWrapIdentifier: (value) =>
+          ({ id: 'id', firstName: 'first_name' }[value]),
+      };
+      expect(
+        await resolveColumnTypesFromDb(dialectClient, null, 'users', [
+          'id',
+          'firstName',
+        ])
+      ).to.eql({ id: 'integer', firstName: 'varchar' });
+    });
+
     it("throws when 'from_db' finds no type for a column", async function () {
       const dialectClient = {
         batchUpdateColumnTypesFromDb: async () => ({ id: 'integer' }),
+        customWrapIdentifier: (value) => value,
       };
       let error;
       try {
@@ -843,6 +1480,104 @@ describe('batchUpdate (db-less)', function () {
       expect(error.message).to.equal(
         `columnTypes 'from_db': users has no column mood`
       );
+    });
+    it("names a missing column when 'json' reads the catalog for a Buffer key", async function () {
+      const knex = knexLib({ client: 'pg' });
+      knex.client.batchUpdateColumnTypesFromDb = async () => ({
+        id: '"pg_catalog"."bytea"',
+      });
+      let error;
+      try {
+        await knex
+          .batchUpdate('users', [{ id: Buffer.from('a'), nope: 'x' }], 'id', {
+            mode: 'json',
+          })
+          .transacting(knex);
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error.message).to.equal('Invalid batch: users has no column nope');
+    });
+
+    it("refuses an unsafe catalog type when 'json' reads it for a Buffer key", async function () {
+      const knex = knexLib({ client: 'pg' });
+      knex.client.batchUpdateColumnTypesFromDb = async () => ({
+        id: '"pg_catalog"."bytea"',
+        mood: 'USER-DEFINED',
+      });
+      let error;
+      try {
+        await knex
+          .batchUpdate('users', [{ id: Buffer.from('a'), mood: 'x' }], 'id', {
+            mode: 'json',
+          })
+          .transacting(knex);
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error.message).to.equal(
+        `Invalid batch: column mood has type "USER-DEFINED", which is not a valid type name; pass mode 'union' with a columnTypes entry for it`
+      );
+    });
+
+    it("splits a Uint8Array column out of 'json' as it does a Buffer", async function () {
+      const knex = knexLib({ client: 'pg' });
+      const statements = [];
+      knex.client.acquireConnection = async () => ({ __knexUid: 'stub' });
+      knex.client.releaseConnection = async () => {};
+      knex.client._query = async (connection, query) => {
+        statements.push([query.sql, query.bindings]);
+        return query;
+      };
+      knex.client.processResponse = () => [];
+      knex.client.batchUpdateColumnTypesFromDb = async () => ({
+        id: '"pg_catalog"."int4"',
+        name: '"pg_catalog"."text"',
+        avatar: '"pg_catalog"."bytea"',
+      });
+      await knex
+        .batchUpdate(
+          'users',
+          [{ id: 1, name: 'a', avatar: new Uint8Array([120, 121]) }],
+          'id',
+          { mode: 'json' }
+        )
+        .transacting(knex);
+      expect(statements).to.eql([
+        [
+          'update "users" set "name" = "v"."name" from jsonb_populate_recordset(null::"users", $1) as "v" where "users"."id" = "v"."id"',
+          ['[{"id":1,"name":"a"}]'],
+        ],
+        [
+          'update "users" set "avatar" = "v"."avatar" from (select $1::"pg_catalog"."int4" as "id", $2::"pg_catalog"."bytea" as "avatar") as "v" where "users"."id" = "v"."id"',
+          [1, new Uint8Array([120, 121])],
+        ],
+      ]);
+    });
+
+    it("skips the 'from_db' query when 'json' runs a Buffer key as 'union'", async function () {
+      const knex = knexLib({ client: 'mysql' });
+      const statements = [];
+      knex.client.acquireConnection = async () => ({ __knexUid: 'stub' });
+      knex.client.releaseConnection = async () => {};
+      knex.client._query = async (connection, query) => {
+        statements.push(query.sql);
+        return query;
+      };
+      knex.client.processResponse = () => [];
+      knex.client.batchUpdateColumnTypesFromDb = async () => {
+        statements.push('from_db');
+        return { id: 'varbinary(4)', name: 'text' };
+      };
+      await knex
+        .batchUpdate('users', [{ id: Buffer.from('a'), name: 'x' }], 'id', {
+          mode: 'json',
+          columnTypes: 'from_db',
+        })
+        .transacting(knex);
+      expect(statements).to.eql([
+        'update `users` inner join (select ? as `id`, ? as `name`) as `src` on `users`.`id` = `src`.`id` set `users`.`name` = `src`.`name`',
+      ]);
     });
 
     it("accepts the 'from_data' and 'from_db' columnTypes strategies", function () {
@@ -891,6 +1626,39 @@ describe('batchUpdate (db-less)', function () {
       }
     });
 
+    it('caps a case chunk by key and column count on the measured dialects', function () {
+      expect(clients['pg'].client.batchUpdateRowLimit('case', 1, 1)).to.equal(
+        250
+      );
+      expect(clients['pg'].client.batchUpdateRowLimit('case', 1, 10)).to.equal(
+        250
+      );
+      expect(clients['pg'].client.batchUpdateRowLimit('case', 2, 3)).to.equal(
+        50
+      );
+      expect(
+        clients['cockroachdb'].client.batchUpdateRowLimit('case', 1, 10)
+      ).to.equal(250);
+      expect(
+        clients['cockroachdb'].client.batchUpdateRowLimit('case', 2, 3)
+      ).to.equal(50);
+      expect(
+        clients['redshift'].client.batchUpdateRowLimit('case', 2, 3)
+      ).to.equal(Infinity);
+      expect(clients['pg'].client.batchUpdateRowLimit('union', 2, 3)).to.equal(
+        Infinity
+      );
+      expect(
+        clients['sqlite3'].client.batchUpdateRowLimit('case', 2, 10)
+      ).to.equal(5);
+      expect(
+        clients['sqlite3'].client.batchUpdateRowLimit('case', 1, 100)
+      ).to.equal(1);
+      expect(
+        clients['sqlite3'].client.batchUpdateRowLimit('union', 2, 3)
+      ).to.equal(500);
+    });
+
     it('throws on Redshift for bytea/jsonb casts it has no type for', function () {
       expect(() =>
         clients['redshift']('users')
@@ -916,7 +1684,7 @@ describe('batchUpdate (db-less)', function () {
           ],
           ['id'],
           'last'
-        ).rows
+        )[0].rows
       ).to.eql([
         { id: 1, v: 'b' },
         { id: 2, v: 'c' },
@@ -933,11 +1701,68 @@ describe('batchUpdate (db-less)', function () {
           ],
           ['tenant', 'id'],
           'last'
-        ).rows
+        )[0].rows
       ).to.eql([
         { tenant: 7, id: 1, v: 'c' },
         { tenant: 8, id: 1, v: 'b' },
       ]);
+    });
+
+    it('dedupes equal Date keys', function () {
+      expect(
+        prepareBatch(
+          [
+            { at: new Date(0), v: 'a' },
+            { at: new Date(0), v: 'b' },
+          ],
+          ['at'],
+          'last'
+        )[0].rows
+      ).to.eql([{ at: new Date(0), v: 'b' }]);
+    });
+
+    it('dedupes equal Buffer keys', function () {
+      expect(
+        prepareBatch(
+          [
+            { token: Buffer.from('ab'), v: 'a' },
+            { token: Buffer.from('ab'), v: 'b' },
+          ],
+          ['token'],
+          'last'
+        )[0].rows
+      ).to.eql([{ token: Buffer.from('ab'), v: 'b' }]);
+    });
+
+    it('dedupes equal Uint8Array keys', function () {
+      expect(
+        prepareBatch(
+          [
+            { token: new Uint8Array([1, 2]), v: 'a' },
+            { token: new Uint8Array([1, 2]), v: 'b' },
+          ],
+          ['token'],
+          'last'
+        )[0].rows
+      ).to.eql([{ token: new Uint8Array([1, 2]), v: 'b' }]);
+    });
+
+    it('refuses a non-finite number in a composite key', function () {
+      expect(() =>
+        prepareBatch(
+          [
+            { score: Infinity, tag: 'a', v: 'x' },
+            { score: NaN, tag: 'a', v: 'y' },
+          ],
+          ['score', 'tag'],
+          'last'
+        )
+      )
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          "Invalid batch: a key holds Infinity, which a composite, array or object key can't compare"
+        );
     });
 
     it('throws on a duplicate key when requested', function () {
@@ -951,6 +1776,278 @@ describe('batchUpdate (db-less)', function () {
           'throw'
         )
       ).to.throw(/duplicate key/);
+    });
+    it('throws on a duplicate object key when requested', function () {
+      expect(() =>
+        prepareBatch(
+          [
+            { id: { a: 1 }, v: 'a' },
+            { id: { a: 1 }, v: 'b' },
+          ],
+          ['id'],
+          'throw'
+        )
+      )
+        .to.throw(Error)
+        .with.property(
+          'message',
+          `Invalid batch: duplicate key [{"a":1}] (use onDuplicateKey: 'each' to apply every row in order)`
+        );
+    });
+
+    it('throws on a duplicate object key holding a bigint when requested', function () {
+      expect(() =>
+        prepareBatch(
+          [
+            { id: { a: 1n }, v: 'a' },
+            { id: { a: 1n }, v: 'b' },
+          ],
+          ['id'],
+          'throw'
+        )
+      )
+        .to.throw(Error)
+        .with.property(
+          'message',
+          `Invalid batch: duplicate key [{"a":"1"}] (use onDuplicateKey: 'each' to apply every row in order)`
+        );
+    });
+
+    it('keeps non-plain object keys as distinct rows', function () {
+      class Money {
+        #amount;
+        constructor(amount) {
+          this.#amount = amount;
+        }
+      }
+      const firstKey = new Money(1);
+      const secondKey = new Money(2);
+      expect(
+        prepareBatch(
+          [
+            { id: firstKey, v: 'a' },
+            { id: secondKey, v: 'b' },
+          ],
+          ['id'],
+          'last'
+        )[0].rows
+      ).to.eql([
+        { id: firstKey, v: 'a' },
+        { id: secondKey, v: 'b' },
+      ]);
+    });
+
+    it('dedupes object keys whatever their property order', function () {
+      expect(
+        prepareBatch(
+          [
+            { id: { a: 1, n: { c: 1, d: 2 } }, v: 'a' },
+            { id: { n: { d: 2, c: 1 }, a: 1 }, v: 'b' },
+          ],
+          ['id'],
+          'last'
+        )[0].rows
+      ).to.eql([{ id: { n: { d: 2, c: 1 }, a: 1 }, v: 'b' }]);
+    });
+
+    it('keeps raw keys as distinct rows', function () {
+      const knex = knexLib({ client: 'pg' });
+      const firstKey = knex.raw('?', [1]);
+      const secondKey = knex.raw('?', [2]);
+      expect(
+        prepareBatch(
+          [
+            { id: firstKey, v: 'a' },
+            { id: secondKey, v: 'b' },
+          ],
+          ['id'],
+          'last'
+        )[0].rows
+      ).to.eql([
+        { id: firstKey, v: 'a' },
+        { id: secondKey, v: 'b' },
+      ]);
+    });
+
+    it('throws on a duplicate raw key when requested', function () {
+      const knex = knexLib({ client: 'pg' });
+      const sharedKey = knex.raw('?', [1]);
+      expect(() =>
+        prepareBatch(
+          [
+            { id: sharedKey, v: 'x' },
+            { id: sharedKey, v: 'y' },
+          ],
+          ['id'],
+          'throw'
+        )
+      )
+        .to.throw(Error)
+        .with.property(
+          'message',
+          `Invalid batch: duplicate key ["[Raw]"] (use onDuplicateKey: 'each' to apply every row in order)`
+        );
+    });
+
+    it('keeps raw composite keys as distinct rows', function () {
+      const knex = knexLib({ client: 'pg' });
+      const firstKey = knex.raw('?', [1]);
+      const secondKey = knex.raw('?', [2]);
+      expect(
+        prepareBatch(
+          [
+            { a: firstKey, b: 1, v: 'x' },
+            { a: secondKey, b: 1, v: 'y' },
+          ],
+          ['a', 'b'],
+          'last'
+        )[0].rows
+      ).to.eql([
+        { a: firstKey, b: 1, v: 'x' },
+        { a: secondKey, b: 1, v: 'y' },
+      ]);
+    });
+
+    it('dedupes a raw composite key used twice', function () {
+      const knex = knexLib({ client: 'pg' });
+      const sharedKey = knex.raw('?', [1]);
+      expect(
+        prepareBatch(
+          [
+            { a: sharedKey, b: 1, v: 'x' },
+            { a: sharedKey, b: 1, v: 'y' },
+          ],
+          ['a', 'b'],
+          'last'
+        )[0].rows
+      ).to.eql([{ a: sharedKey, b: 1, v: 'y' }]);
+    });
+
+    it('throws on a duplicate raw composite key when requested', function () {
+      const knex = knexLib({ client: 'pg' });
+      const sharedKey = knex.raw('?', [1]);
+      expect(() =>
+        prepareBatch(
+          [
+            { a: sharedKey, b: 1, v: 'x' },
+            { a: sharedKey, b: 1, v: 'y' },
+          ],
+          ['a', 'b'],
+          'throw'
+        )
+      )
+        .to.throw(Error)
+        .with.property(
+          'message',
+          `Invalid batch: duplicate key ["[Raw]",1] (use onDuplicateKey: 'each' to apply every row in order)`
+        );
+    });
+
+    it('keeps non-plain object composite keys as distinct rows', function () {
+      class Money {
+        #amount;
+        constructor(amount) {
+          this.#amount = amount;
+        }
+      }
+      const firstKey = new Money(1);
+      const secondKey = new Money(2);
+      expect(
+        prepareBatch(
+          [
+            { a: firstKey, b: 1, v: 'x' },
+            { a: secondKey, b: 1, v: 'y' },
+          ],
+          ['a', 'b'],
+          'last'
+        )[0].rows
+      ).to.eql([
+        { a: firstKey, b: 1, v: 'x' },
+        { a: secondKey, b: 1, v: 'y' },
+      ]);
+    });
+
+    it('keeps subquery composite keys as distinct rows', function () {
+      const firstKey = function () {
+        this.select('id').from('accounts').where('name', 'a');
+      };
+      const secondKey = function () {
+        this.select('id').from('accounts').where('name', 'b');
+      };
+      expect(
+        prepareBatch(
+          [
+            { a: firstKey, b: 1, v: 'x' },
+            { a: secondKey, b: 1, v: 'y' },
+          ],
+          ['a', 'b'],
+          'last'
+        )[0].rows
+      ).to.eql([
+        { a: firstKey, b: 1, v: 'x' },
+        { a: secondKey, b: 1, v: 'y' },
+      ]);
+    });
+
+    it('dedupes equal Date, Buffer and plain object composite keys', function () {
+      expect(
+        prepareBatch(
+          [
+            {
+              at: new Date('2026-01-01T00:00:00Z'),
+              token: Buffer.from('ab'),
+              tag: { a: 1 },
+              v: 'x',
+            },
+            {
+              at: new Date('2026-01-01T00:00:00Z'),
+              token: Buffer.from('ab'),
+              tag: { a: 1 },
+              v: 'y',
+            },
+          ],
+          ['at', 'token', 'tag'],
+          'last'
+        )[0].rows
+      ).to.eql([
+        {
+          at: new Date('2026-01-01T00:00:00Z'),
+          token: Buffer.from('ab'),
+          tag: { a: 1 },
+          v: 'y',
+        },
+      ]);
+    });
+
+    it('keeps a raw and a plain object composite key apart', function () {
+      const knex = knexLib({ client: 'pg' });
+      const rawKey = knex.raw('?', [1]);
+      expect(
+        prepareBatch(
+          [
+            { a: rawKey, b: 1, v: 'x' },
+            { a: {}, b: 1, v: 'y' },
+          ],
+          ['a', 'b'],
+          'last'
+        )[0].rows
+      ).to.eql([
+        { a: rawKey, b: 1, v: 'x' },
+        { a: {}, b: 1, v: 'y' },
+      ]);
+    });
+
+    it('dedupes equal array keys', function () {
+      expect(
+        prepareBatch(
+          [
+            { id: [1, 2], v: 'a' },
+            { id: [1, 2], v: 'b' },
+          ],
+          ['id'],
+          'last'
+        )[0].rows
+      ).to.eql([{ id: [1, 2], v: 'b' }]);
     });
   });
 });

@@ -6,10 +6,10 @@
         "rowCount": 3,
         "colCount": 3,
         "mode": "union",
-        "sqlBytes": 245,
+        "sqlBytes": 244,
         "params": 12,
         "chunks": 1,
-        "ms": 7.696441
+        "ms": 6.671448
       },
       {
         "rowCount": 3,
@@ -18,25 +18,25 @@
         "sqlBytes": 391,
         "params": 21,
         "chunks": 1,
-        "ms": 3.132086
+        "ms": 2.835834
       },
       {
         "rowCount": 3,
         "colCount": 3,
         "mode": "json",
-        "sqlBytes": 179,
+        "sqlBytes": 153,
         "params": 1,
         "chunks": 1,
-        "ms": 2.894512
+        "ms": 3.012824
       },
       {
         "rowCount": 5,
         "colCount": 3,
         "mode": "union",
-        "sqlBytes": 301,
+        "sqlBytes": 300,
         "params": 20,
         "chunks": 1,
-        "ms": 3.141911
+        "ms": 2.805108
       },
       {
         "rowCount": 5,
@@ -45,25 +45,25 @@
         "sqlBytes": 571,
         "params": 35,
         "chunks": 1,
-        "ms": 2.771881
+        "ms": 2.703228
       },
       {
         "rowCount": 5,
         "colCount": 3,
         "mode": "json",
-        "sqlBytes": 179,
+        "sqlBytes": 153,
         "params": 1,
         "chunks": 1,
-        "ms": 2.598584
+        "ms": 2.668082
       },
       {
         "rowCount": 10,
         "colCount": 3,
         "mode": "union",
-        "sqlBytes": 441,
+        "sqlBytes": 440,
         "params": 40,
         "chunks": 1,
-        "ms": 2.929645
+        "ms": 2.928546
       },
       {
         "rowCount": 10,
@@ -72,25 +72,25 @@
         "sqlBytes": 1021,
         "params": 70,
         "chunks": 1,
-        "ms": 2.902114
+        "ms": 2.699972
       },
       {
         "rowCount": 10,
         "colCount": 3,
         "mode": "json",
-        "sqlBytes": 179,
+        "sqlBytes": 153,
         "params": 1,
         "chunks": 1,
-        "ms": 2.655806
+        "ms": 2.614482
       },
       {
         "rowCount": 20,
         "colCount": 3,
         "mode": "union",
-        "sqlBytes": 721,
+        "sqlBytes": 720,
         "params": 80,
         "chunks": 1,
-        "ms": 4.161941
+        "ms": 3.340082
       },
       {
         "rowCount": 20,
@@ -99,25 +99,25 @@
         "sqlBytes": 1921,
         "params": 140,
         "chunks": 1,
-        "ms": 4.153237
+        "ms": 3.346214
       },
       {
         "rowCount": 20,
         "colCount": 3,
         "mode": "json",
-        "sqlBytes": 179,
+        "sqlBytes": 153,
         "params": 1,
         "chunks": 1,
-        "ms": 3.007753
+        "ms": 2.821979
       },
       {
         "rowCount": 50,
         "colCount": 3,
         "mode": "union",
-        "sqlBytes": 1561,
+        "sqlBytes": 1560,
         "params": 200,
         "chunks": 1,
-        "ms": 4.787287
+        "ms": 5.318362
       },
       {
         "rowCount": 50,
@@ -126,25 +126,25 @@
         "sqlBytes": 4621,
         "params": 350,
         "chunks": 1,
-        "ms": 4.84159
+        "ms": 4.561244
       },
       {
         "rowCount": 50,
         "colCount": 3,
         "mode": "json",
-        "sqlBytes": 179,
+        "sqlBytes": 153,
         "params": 1,
         "chunks": 1,
-        "ms": 2.864767
+        "ms": 2.769201
       },
       {
         "rowCount": 80,
         "colCount": 3,
         "mode": "union",
-        "sqlBytes": 2401,
+        "sqlBytes": 2400,
         "params": 320,
         "chunks": 1,
-        "ms": 8.560049
+        "ms": 7.592532
       },
       {
         "rowCount": 80,
@@ -153,25 +153,25 @@
         "sqlBytes": 7321,
         "params": 560,
         "chunks": 1,
-        "ms": 6.375451
+        "ms": 6.390526
       },
       {
         "rowCount": 80,
         "colCount": 3,
         "mode": "json",
-        "sqlBytes": 179,
+        "sqlBytes": 153,
         "params": 1,
         "chunks": 1,
-        "ms": 3.624697
+        "ms": 3.477719
       },
       {
         "rowCount": 100,
         "colCount": 3,
         "mode": "union",
-        "sqlBytes": 2961,
+        "sqlBytes": 2960,
         "params": 400,
         "chunks": 1,
-        "ms": 6.478728
+        "ms": 6.107589
       },
       {
         "rowCount": 100,
@@ -180,25 +180,25 @@
         "sqlBytes": 9121,
         "params": 700,
         "chunks": 1,
-        "ms": 7.324058
+        "ms": 6.089356
       },
       {
         "rowCount": 100,
         "colCount": 3,
         "mode": "json",
-        "sqlBytes": 179,
+        "sqlBytes": 153,
         "params": 1,
         "chunks": 1,
-        "ms": 3.270601
+        "ms": 3.514637
       },
       {
         "rowCount": 1000,
         "colCount": 3,
         "mode": "union",
-        "sqlBytes": 28161,
+        "sqlBytes": 28160,
         "params": 4000,
         "chunks": 1,
-        "ms": 47.079951
+        "ms": 39.077321
       },
       {
         "rowCount": 1000,
@@ -206,26 +206,26 @@
         "mode": "case",
         "sqlBytes": 90121,
         "params": 7000,
-        "chunks": 1,
-        "ms": 55.140935
+        "chunks": 4,
+        "ms": 39.329603
       },
       {
         "rowCount": 1000,
         "colCount": 3,
         "mode": "json",
-        "sqlBytes": 179,
+        "sqlBytes": 153,
         "params": 1,
         "chunks": 1,
-        "ms": 10.441817
+        "ms": 12.320225
       },
       {
         "rowCount": 1000,
         "colCount": 20,
         "mode": "union",
-        "sqlBytes": 79718,
+        "sqlBytes": 79717,
         "params": 21000,
         "chunks": 1,
-        "ms": 104.321517
+        "ms": 106.439182
       },
       {
         "rowCount": 1000,
@@ -233,26 +233,26 @@
         "mode": "case",
         "sqlBytes": 583600,
         "params": 41000,
-        "chunks": 1,
-        "ms": 281.17025
+        "chunks": 20,
+        "ms": 169.530579
       },
       {
         "rowCount": 1000,
         "colCount": 20,
         "mode": "json",
-        "sqlBytes": 685,
+        "sqlBytes": 462,
         "params": 1,
         "chunks": 1,
-        "ms": 27.830601
+        "ms": 36.174252
       },
       {
         "rowCount": 10000,
         "colCount": 3,
         "mode": "union",
-        "sqlBytes": 280161,
+        "sqlBytes": 280160,
         "params": 40000,
-        "chunks": 1,
-        "ms": 399.163664
+        "chunks": 10,
+        "ms": 386.668673
       },
       {
         "rowCount": 10000,
@@ -260,26 +260,26 @@
         "mode": "case",
         "sqlBytes": 900121,
         "params": 70000,
-        "chunks": 2,
-        "ms": 454.032647
+        "chunks": 31,
+        "ms": 331.000264
       },
       {
         "rowCount": 10000,
         "colCount": 3,
         "mode": "json",
-        "sqlBytes": 179,
+        "sqlBytes": 153,
         "params": 1,
-        "chunks": 1,
-        "ms": 91.346655
+        "chunks": 10,
+        "ms": 100.805247
       },
       {
         "rowCount": 50000,
         "colCount": 3,
         "mode": "union",
-        "sqlBytes": 1400161,
+        "sqlBytes": 1400160,
         "params": 200000,
-        "chunks": 4,
-        "ms": 2643.744124
+        "chunks": 50,
+        "ms": 2552.918804
       },
       {
         "rowCount": 50000,
@@ -287,17 +287,17 @@
         "mode": "case",
         "sqlBytes": 4500121,
         "params": 350000,
-        "chunks": 6,
-        "ms": 2357.899804
+        "chunks": 151,
+        "ms": 2072.677632
       },
       {
         "rowCount": 50000,
         "colCount": 3,
         "mode": "json",
-        "sqlBytes": 179,
+        "sqlBytes": 153,
         "params": 1,
-        "chunks": 1,
-        "ms": 757.158608
+        "chunks": 50,
+        "ms": 601.429504
       }
     ]
   },
@@ -311,7 +311,7 @@
         "sqlBytes": 255,
         "params": 12,
         "chunks": 1,
-        "ms": 3.938385
+        "ms": 4.943129
       },
       {
         "rowCount": 3,
@@ -320,7 +320,7 @@
         "sqlBytes": 391,
         "params": 21,
         "chunks": 1,
-        "ms": 2.671022
+        "ms": 3.008945
       },
       {
         "rowCount": 3,
@@ -329,7 +329,7 @@
         "sqlBytes": 284,
         "params": 1,
         "chunks": 1,
-        "ms": 2.927733
+        "ms": 3.553633
       },
       {
         "rowCount": 5,
@@ -338,7 +338,7 @@
         "sqlBytes": 311,
         "params": 20,
         "chunks": 1,
-        "ms": 2.726754
+        "ms": 3.020776
       },
       {
         "rowCount": 5,
@@ -347,7 +347,7 @@
         "sqlBytes": 571,
         "params": 35,
         "chunks": 1,
-        "ms": 2.760099
+        "ms": 2.931188
       },
       {
         "rowCount": 5,
@@ -356,7 +356,7 @@
         "sqlBytes": 284,
         "params": 1,
         "chunks": 1,
-        "ms": 2.786759
+        "ms": 3.006419
       },
       {
         "rowCount": 10,
@@ -365,7 +365,7 @@
         "sqlBytes": 451,
         "params": 40,
         "chunks": 1,
-        "ms": 2.711778
+        "ms": 3.048519
       },
       {
         "rowCount": 10,
@@ -374,7 +374,7 @@
         "sqlBytes": 1021,
         "params": 70,
         "chunks": 1,
-        "ms": 2.561788
+        "ms": 3.040473
       },
       {
         "rowCount": 10,
@@ -383,7 +383,7 @@
         "sqlBytes": 284,
         "params": 1,
         "chunks": 1,
-        "ms": 2.835588
+        "ms": 3.168583
       },
       {
         "rowCount": 20,
@@ -392,7 +392,7 @@
         "sqlBytes": 731,
         "params": 80,
         "chunks": 1,
-        "ms": 2.786578
+        "ms": 3.484544
       },
       {
         "rowCount": 20,
@@ -401,7 +401,7 @@
         "sqlBytes": 1921,
         "params": 140,
         "chunks": 1,
-        "ms": 2.965753
+        "ms": 4.903176
       },
       {
         "rowCount": 20,
@@ -410,7 +410,7 @@
         "sqlBytes": 284,
         "params": 1,
         "chunks": 1,
-        "ms": 2.873521
+        "ms": 3.163544
       },
       {
         "rowCount": 50,
@@ -419,7 +419,7 @@
         "sqlBytes": 1571,
         "params": 200,
         "chunks": 1,
-        "ms": 3.522716
+        "ms": 4.010509
       },
       {
         "rowCount": 50,
@@ -428,7 +428,7 @@
         "sqlBytes": 4621,
         "params": 350,
         "chunks": 1,
-        "ms": 4.663533
+        "ms": 4.741423
       },
       {
         "rowCount": 50,
@@ -437,7 +437,7 @@
         "sqlBytes": 284,
         "params": 1,
         "chunks": 1,
-        "ms": 3.336879
+        "ms": 5.057784
       },
       {
         "rowCount": 80,
@@ -446,7 +446,7 @@
         "sqlBytes": 2411,
         "params": 320,
         "chunks": 1,
-        "ms": 5.253477
+        "ms": 6.070517
       },
       {
         "rowCount": 80,
@@ -455,7 +455,7 @@
         "sqlBytes": 7321,
         "params": 560,
         "chunks": 1,
-        "ms": 4.721893
+        "ms": 5.257638
       },
       {
         "rowCount": 80,
@@ -464,7 +464,7 @@
         "sqlBytes": 284,
         "params": 1,
         "chunks": 1,
-        "ms": 3.907214
+        "ms": 4.448215
       },
       {
         "rowCount": 100,
@@ -473,7 +473,7 @@
         "sqlBytes": 2971,
         "params": 400,
         "chunks": 1,
-        "ms": 4.386795
+        "ms": 5.159664
       },
       {
         "rowCount": 100,
@@ -482,7 +482,7 @@
         "sqlBytes": 9121,
         "params": 700,
         "chunks": 1,
-        "ms": 5.919275
+        "ms": 6.488108
       },
       {
         "rowCount": 100,
@@ -491,7 +491,7 @@
         "sqlBytes": 284,
         "params": 1,
         "chunks": 1,
-        "ms": 3.90753
+        "ms": 4.537161
       },
       {
         "rowCount": 1000,
@@ -500,7 +500,7 @@
         "sqlBytes": 28171,
         "params": 4000,
         "chunks": 1,
-        "ms": 28.23275
+        "ms": 29.772582
       },
       {
         "rowCount": 1000,
@@ -509,7 +509,7 @@
         "sqlBytes": 90121,
         "params": 7000,
         "chunks": 1,
-        "ms": 58.811704
+        "ms": 65.372946
       },
       {
         "rowCount": 1000,
@@ -518,7 +518,7 @@
         "sqlBytes": 284,
         "params": 1,
         "chunks": 1,
-        "ms": 20.015992
+        "ms": 21.911831
       },
       {
         "rowCount": 1000,
@@ -527,7 +527,7 @@
         "sqlBytes": 79796,
         "params": 21000,
         "chunks": 1,
-        "ms": 55.803292
+        "ms": 72.583922
       },
       {
         "rowCount": 1000,
@@ -536,7 +536,7 @@
         "sqlBytes": 583600,
         "params": 41000,
         "chunks": 1,
-        "ms": 310.168029
+        "ms": 349.669276
       },
       {
         "rowCount": 1000,
@@ -545,7 +545,7 @@
         "sqlBytes": 1259,
         "params": 1,
         "chunks": 1,
-        "ms": 60.548156
+        "ms": 72.998469
       },
       {
         "rowCount": 10000,
@@ -553,8 +553,8 @@
         "mode": "union",
         "sqlBytes": 280171,
         "params": 40000,
-        "chunks": 1,
-        "ms": 207.375461
+        "chunks": 10,
+        "ms": 226.036587
       },
       {
         "rowCount": 10000,
@@ -562,8 +562,8 @@
         "mode": "case",
         "sqlBytes": 900121,
         "params": 70000,
-        "chunks": 2,
-        "ms": 557.763339
+        "chunks": 10,
+        "ms": 585.618344
       },
       {
         "rowCount": 10000,
@@ -571,8 +571,8 @@
         "mode": "json",
         "sqlBytes": 284,
         "params": 1,
-        "chunks": 1,
-        "ms": 173.420018
+        "chunks": 10,
+        "ms": 190.778876
       },
       {
         "rowCount": 50000,
@@ -580,8 +580,8 @@
         "mode": "union",
         "sqlBytes": 1400171,
         "params": 200000,
-        "chunks": 4,
-        "ms": 991.88722
+        "chunks": 50,
+        "ms": 1134.828403
       },
       {
         "rowCount": 50000,
@@ -589,8 +589,8 @@
         "mode": "case",
         "sqlBytes": 4500121,
         "params": 350000,
-        "chunks": 6,
-        "ms": 2763.388765
+        "chunks": 50,
+        "ms": 2889.335935
       },
       {
         "rowCount": 50000,
@@ -598,8 +598,8 @@
         "mode": "json",
         "sqlBytes": 284,
         "params": 1,
-        "chunks": 1,
-        "ms": 873.632377
+        "chunks": 50,
+        "ms": 954.1482
       }
     ]
   },
@@ -613,7 +613,7 @@
         "sqlBytes": 255,
         "params": 12,
         "chunks": 1,
-        "ms": 4.28383
+        "ms": 5.84158
       },
       {
         "rowCount": 3,
@@ -622,7 +622,7 @@
         "sqlBytes": 391,
         "params": 21,
         "chunks": 1,
-        "ms": 2.967689
+        "ms": 3.389488
       },
       {
         "rowCount": 3,
@@ -631,7 +631,7 @@
         "sqlBytes": 284,
         "params": 1,
         "chunks": 1,
-        "ms": 3.127829
+        "ms": 3.348545
       },
       {
         "rowCount": 5,
@@ -640,7 +640,7 @@
         "sqlBytes": 311,
         "params": 20,
         "chunks": 1,
-        "ms": 3.005961
+        "ms": 2.700478
       },
       {
         "rowCount": 5,
@@ -649,7 +649,7 @@
         "sqlBytes": 571,
         "params": 35,
         "chunks": 1,
-        "ms": 2.803572
+        "ms": 2.85406
       },
       {
         "rowCount": 5,
@@ -658,7 +658,7 @@
         "sqlBytes": 284,
         "params": 1,
         "chunks": 1,
-        "ms": 2.825533
+        "ms": 2.995881
       },
       {
         "rowCount": 10,
@@ -667,7 +667,7 @@
         "sqlBytes": 451,
         "params": 40,
         "chunks": 1,
-        "ms": 2.964343
+        "ms": 2.972797
       },
       {
         "rowCount": 10,
@@ -676,7 +676,7 @@
         "sqlBytes": 1021,
         "params": 70,
         "chunks": 1,
-        "ms": 2.660975
+        "ms": 2.825371
       },
       {
         "rowCount": 10,
@@ -685,7 +685,7 @@
         "sqlBytes": 284,
         "params": 1,
         "chunks": 1,
-        "ms": 2.806358
+        "ms": 2.901454
       },
       {
         "rowCount": 20,
@@ -694,7 +694,7 @@
         "sqlBytes": 731,
         "params": 80,
         "chunks": 1,
-        "ms": 2.859467
+        "ms": 3.117568
       },
       {
         "rowCount": 20,
@@ -703,7 +703,7 @@
         "sqlBytes": 1921,
         "params": 140,
         "chunks": 1,
-        "ms": 3.095959
+        "ms": 3.458137
       },
       {
         "rowCount": 20,
@@ -712,7 +712,7 @@
         "sqlBytes": 284,
         "params": 1,
         "chunks": 1,
-        "ms": 2.749701
+        "ms": 2.823548
       },
       {
         "rowCount": 50,
@@ -721,7 +721,7 @@
         "sqlBytes": 1571,
         "params": 200,
         "chunks": 1,
-        "ms": 3.523328
+        "ms": 3.514452
       },
       {
         "rowCount": 50,
@@ -730,7 +730,7 @@
         "sqlBytes": 4621,
         "params": 350,
         "chunks": 1,
-        "ms": 3.62572
+        "ms": 4.42678
       },
       {
         "rowCount": 50,
@@ -739,7 +739,7 @@
         "sqlBytes": 284,
         "params": 1,
         "chunks": 1,
-        "ms": 3.142887
+        "ms": 3.389058
       },
       {
         "rowCount": 80,
@@ -748,7 +748,7 @@
         "sqlBytes": 2411,
         "params": 320,
         "chunks": 1,
-        "ms": 4.811347
+        "ms": 4.810109
       },
       {
         "rowCount": 80,
@@ -757,7 +757,7 @@
         "sqlBytes": 7321,
         "params": 560,
         "chunks": 1,
-        "ms": 4.417941
+        "ms": 4.66145
       },
       {
         "rowCount": 80,
@@ -766,7 +766,7 @@
         "sqlBytes": 284,
         "params": 1,
         "chunks": 1,
-        "ms": 3.724756
+        "ms": 4.158128
       },
       {
         "rowCount": 100,
@@ -775,7 +775,7 @@
         "sqlBytes": 2971,
         "params": 400,
         "chunks": 1,
-        "ms": 5.435173
+        "ms": 5.785085
       },
       {
         "rowCount": 100,
@@ -784,7 +784,7 @@
         "sqlBytes": 9121,
         "params": 700,
         "chunks": 1,
-        "ms": 4.330898
+        "ms": 7.202769
       },
       {
         "rowCount": 100,
@@ -793,7 +793,7 @@
         "sqlBytes": 284,
         "params": 1,
         "chunks": 1,
-        "ms": 3.605461
+        "ms": 4.185849
       },
       {
         "rowCount": 1000,
@@ -802,7 +802,7 @@
         "sqlBytes": 28171,
         "params": 4000,
         "chunks": 1,
-        "ms": 20.29107
+        "ms": 27.391362
       },
       {
         "rowCount": 1000,
@@ -811,7 +811,7 @@
         "sqlBytes": 90121,
         "params": 7000,
         "chunks": 1,
-        "ms": 51.173633
+        "ms": 55.682008
       },
       {
         "rowCount": 1000,
@@ -820,7 +820,7 @@
         "sqlBytes": 284,
         "params": 1,
         "chunks": 1,
-        "ms": 21.197187
+        "ms": 24.101927
       },
       {
         "rowCount": 1000,
@@ -829,7 +829,7 @@
         "sqlBytes": 79796,
         "params": 21000,
         "chunks": 1,
-        "ms": 52.517101
+        "ms": 62.288964
       },
       {
         "rowCount": 1000,
@@ -838,7 +838,7 @@
         "sqlBytes": 583600,
         "params": 41000,
         "chunks": 1,
-        "ms": 305.245186
+        "ms": 308.525826
       },
       {
         "rowCount": 1000,
@@ -847,7 +847,7 @@
         "sqlBytes": 1259,
         "params": 1,
         "chunks": 1,
-        "ms": 65.305809
+        "ms": 69.440926
       },
       {
         "rowCount": 10000,
@@ -855,8 +855,8 @@
         "mode": "union",
         "sqlBytes": 280171,
         "params": 40000,
-        "chunks": 1,
-        "ms": 142.144773
+        "chunks": 10,
+        "ms": 143.759765
       },
       {
         "rowCount": 10000,
@@ -864,8 +864,8 @@
         "mode": "case",
         "sqlBytes": 900121,
         "params": 70000,
-        "chunks": 2,
-        "ms": 491.731084
+        "chunks": 10,
+        "ms": 502.173445
       },
       {
         "rowCount": 10000,
@@ -873,8 +873,8 @@
         "mode": "json",
         "sqlBytes": 284,
         "params": 1,
-        "chunks": 1,
-        "ms": 126.972838
+        "chunks": 10,
+        "ms": 128.075589
       },
       {
         "rowCount": 50000,
@@ -882,8 +882,8 @@
         "mode": "union",
         "sqlBytes": 1400171,
         "params": 200000,
-        "chunks": 4,
-        "ms": 694.12927
+        "chunks": 50,
+        "ms": 700.608681
       },
       {
         "rowCount": 50000,
@@ -891,8 +891,8 @@
         "mode": "case",
         "sqlBytes": 4500121,
         "params": 350000,
-        "chunks": 6,
-        "ms": 2267.501863
+        "chunks": 50,
+        "ms": 2327.309362
       },
       {
         "rowCount": 50000,
@@ -900,8 +900,8 @@
         "mode": "json",
         "sqlBytes": 284,
         "params": 1,
-        "chunks": 1,
-        "ms": 654.603253
+        "chunks": 50,
+        "ms": 673.969805
       }
     ]
   },
@@ -915,7 +915,7 @@
         "sqlBytes": 236,
         "params": 12,
         "chunks": 1,
-        "ms": 13.529923
+        "ms": 13.901389
       },
       {
         "rowCount": 3,
@@ -924,7 +924,7 @@
         "sqlBytes": 409,
         "params": 21,
         "chunks": 1,
-        "ms": 7.924949
+        "ms": 8.370616
       },
       {
         "rowCount": 3,
@@ -933,7 +933,7 @@
         "sqlBytes": 254,
         "params": 1,
         "chunks": 1,
-        "ms": 8.145135
+        "ms": 8.681458
       },
       {
         "rowCount": 5,
@@ -942,7 +942,7 @@
         "sqlBytes": 292,
         "params": 20,
         "chunks": 1,
-        "ms": 9.473395
+        "ms": 10.175257
       },
       {
         "rowCount": 5,
@@ -951,7 +951,7 @@
         "sqlBytes": 589,
         "params": 35,
         "chunks": 1,
-        "ms": 8.561148
+        "ms": 10.518921
       },
       {
         "rowCount": 5,
@@ -960,7 +960,7 @@
         "sqlBytes": 254,
         "params": 1,
         "chunks": 1,
-        "ms": 7.80353
+        "ms": 8.379251
       },
       {
         "rowCount": 10,
@@ -969,7 +969,7 @@
         "sqlBytes": 432,
         "params": 40,
         "chunks": 1,
-        "ms": 9.171419
+        "ms": 9.620007
       },
       {
         "rowCount": 10,
@@ -978,7 +978,7 @@
         "sqlBytes": 1039,
         "params": 70,
         "chunks": 1,
-        "ms": 50.157184
+        "ms": 49.95766
       },
       {
         "rowCount": 10,
@@ -987,7 +987,7 @@
         "sqlBytes": 254,
         "params": 1,
         "chunks": 1,
-        "ms": 8.171363
+        "ms": 8.136757
       },
       {
         "rowCount": 20,
@@ -996,7 +996,7 @@
         "sqlBytes": 712,
         "params": 80,
         "chunks": 1,
-        "ms": 50.741607
+        "ms": 51.300871
       },
       {
         "rowCount": 20,
@@ -1005,7 +1005,7 @@
         "sqlBytes": 1939,
         "params": 140,
         "chunks": 1,
-        "ms": 52.796636
+        "ms": 52.20762
       },
       {
         "rowCount": 20,
@@ -1014,7 +1014,7 @@
         "sqlBytes": 254,
         "params": 1,
         "chunks": 1,
-        "ms": 8.783536
+        "ms": 9.239376
       },
       {
         "rowCount": 50,
@@ -1023,7 +1023,7 @@
         "sqlBytes": 1552,
         "params": 200,
         "chunks": 1,
-        "ms": 54.932915
+        "ms": 55.010007
       },
       {
         "rowCount": 50,
@@ -1032,7 +1032,7 @@
         "sqlBytes": 4639,
         "params": 350,
         "chunks": 1,
-        "ms": 64.330869
+        "ms": 63.25475
       },
       {
         "rowCount": 50,
@@ -1041,7 +1041,7 @@
         "sqlBytes": 254,
         "params": 1,
         "chunks": 1,
-        "ms": 53.543944
+        "ms": 55.06277
       },
       {
         "rowCount": 80,
@@ -1050,7 +1050,7 @@
         "sqlBytes": 2392,
         "params": 320,
         "chunks": 1,
-        "ms": 59.883803
+        "ms": 60.777953
       },
       {
         "rowCount": 80,
@@ -1059,7 +1059,7 @@
         "sqlBytes": 7339,
         "params": 560,
         "chunks": 1,
-        "ms": 75.496451
+        "ms": 76.847942
       },
       {
         "rowCount": 80,
@@ -1068,7 +1068,7 @@
         "sqlBytes": 254,
         "params": 1,
         "chunks": 1,
-        "ms": 61.227997
+        "ms": 63.618913
       },
       {
         "rowCount": 100,
@@ -1077,7 +1077,7 @@
         "sqlBytes": 2952,
         "params": 400,
         "chunks": 1,
-        "ms": 63.152464
+        "ms": 65.411441
       },
       {
         "rowCount": 100,
@@ -1086,7 +1086,7 @@
         "sqlBytes": 9139,
         "params": 700,
         "chunks": 1,
-        "ms": 81.938762
+        "ms": 81.104438
       },
       {
         "rowCount": 100,
@@ -1095,7 +1095,7 @@
         "sqlBytes": 254,
         "params": 1,
         "chunks": 1,
-        "ms": 69.879165
+        "ms": 70.966265
       },
       {
         "rowCount": 1000,
@@ -1104,7 +1104,7 @@
         "sqlBytes": 28152,
         "params": 4000,
         "chunks": 2,
-        "ms": 382.670036
+        "ms": 373.631687
       },
       {
         "rowCount": 1000,
@@ -1113,7 +1113,7 @@
         "sqlBytes": 90139,
         "params": 7000,
         "chunks": 4,
-        "ms": 626.022171
+        "ms": 607.546938
       },
       {
         "rowCount": 1000,
@@ -1122,7 +1122,7 @@
         "sqlBytes": 254,
         "params": 1,
         "chunks": 1,
-        "ms": 56.605754
+        "ms": 58.271392
       },
       {
         "rowCount": 1000,
@@ -1131,7 +1131,7 @@
         "sqlBytes": 79607,
         "params": 21000,
         "chunks": 11,
-        "ms": 1145.616151
+        "ms": 1152.638352
       },
       {
         "rowCount": 1000,
@@ -1140,7 +1140,7 @@
         "sqlBytes": 583618,
         "params": 41000,
         "chunks": 20,
-        "ms": 2034.617935
+        "ms": 2041.629014
       },
       {
         "rowCount": 1000,
@@ -1149,7 +1149,7 @@
         "sqlBytes": 1076,
         "params": 1,
         "chunks": 1,
-        "ms": 111.709896
+        "ms": 123.504924
       },
       {
         "rowCount": 10000,
@@ -1158,7 +1158,7 @@
         "sqlBytes": 280152,
         "params": 40000,
         "chunks": 20,
-        "ms": 2060.300976
+        "ms": 2017.089003
       },
       {
         "rowCount": 10000,
@@ -1167,7 +1167,7 @@
         "sqlBytes": 900139,
         "params": 70000,
         "chunks": 34,
-        "ms": 3462.724152
+        "ms": 3428.700073
       },
       {
         "rowCount": 10000,
@@ -1175,8 +1175,8 @@
         "mode": "json",
         "sqlBytes": 254,
         "params": 1,
-        "chunks": 1,
-        "ms": 466.603564
+        "chunks": 10,
+        "ms": 516.819164
       },
       {
         "rowCount": 50000,
@@ -1185,7 +1185,7 @@
         "sqlBytes": 1400152,
         "params": 200000,
         "chunks": 96,
-        "ms": 9159.912456
+        "ms": 9165.787994
       },
       {
         "rowCount": 50000,
@@ -1194,7 +1194,7 @@
         "sqlBytes": 4500139,
         "params": 350000,
         "chunks": 168,
-        "ms": 15522.384978
+        "ms": 15491.71364
       },
       {
         "rowCount": 50000,
@@ -1202,8 +1202,8 @@
         "mode": "json",
         "sqlBytes": 254,
         "params": 1,
-        "chunks": 1,
-        "ms": 2322.155132
+        "chunks": 50,
+        "ms": 2543.559918
       }
     ]
   },
@@ -1217,7 +1217,7 @@
         "sqlBytes": 284,
         "params": 12,
         "chunks": 1,
-        "ms": 10.47489
+        "ms": 43.624422
       },
       {
         "rowCount": 3,
@@ -1226,7 +1226,7 @@
         "sqlBytes": 391,
         "params": 21,
         "chunks": 1,
-        "ms": 5.592821
+        "ms": 170.806556
       },
       {
         "rowCount": 3,
@@ -1235,7 +1235,7 @@
         "sqlBytes": 335,
         "params": 1,
         "chunks": 1,
-        "ms": 7.00123
+        "ms": 6.476107
       },
       {
         "rowCount": 5,
@@ -1244,7 +1244,7 @@
         "sqlBytes": 360,
         "params": 20,
         "chunks": 1,
-        "ms": 7.039731
+        "ms": 132.182515
       },
       {
         "rowCount": 5,
@@ -1253,7 +1253,7 @@
         "sqlBytes": 571,
         "params": 35,
         "chunks": 1,
-        "ms": 5.354958
+        "ms": 223.070392
       },
       {
         "rowCount": 5,
@@ -1262,7 +1262,7 @@
         "sqlBytes": 335,
         "params": 1,
         "chunks": 1,
-        "ms": 7.226188
+        "ms": 7.261145
       },
       {
         "rowCount": 10,
@@ -1271,7 +1271,7 @@
         "sqlBytes": 550,
         "params": 40,
         "chunks": 1,
-        "ms": 8.09513
+        "ms": 7.153256
       },
       {
         "rowCount": 10,
@@ -1280,7 +1280,7 @@
         "sqlBytes": 1021,
         "params": 70,
         "chunks": 1,
-        "ms": 5.917204
+        "ms": 5.30444
       },
       {
         "rowCount": 10,
@@ -1289,7 +1289,7 @@
         "sqlBytes": 335,
         "params": 1,
         "chunks": 1,
-        "ms": 6.809729
+        "ms": 6.257975
       },
       {
         "rowCount": 20,
@@ -1298,7 +1298,7 @@
         "sqlBytes": 930,
         "params": 80,
         "chunks": 1,
-        "ms": 9.758016
+        "ms": 10.824587
       },
       {
         "rowCount": 20,
@@ -1307,7 +1307,7 @@
         "sqlBytes": 1921,
         "params": 140,
         "chunks": 1,
-        "ms": 6.542427
+        "ms": 6.648992
       },
       {
         "rowCount": 20,
@@ -1316,7 +1316,7 @@
         "sqlBytes": 335,
         "params": 1,
         "chunks": 1,
-        "ms": 7.247177
+        "ms": 6.352776
       },
       {
         "rowCount": 50,
@@ -1325,7 +1325,7 @@
         "sqlBytes": 2070,
         "params": 200,
         "chunks": 1,
-        "ms": 17.636037
+        "ms": 48.16133
       },
       {
         "rowCount": 50,
@@ -1334,7 +1334,7 @@
         "sqlBytes": 4621,
         "params": 350,
         "chunks": 1,
-        "ms": 10.95921
+        "ms": 9.13737
       },
       {
         "rowCount": 50,
@@ -1343,7 +1343,7 @@
         "sqlBytes": 335,
         "params": 1,
         "chunks": 1,
-        "ms": 7.172841
+        "ms": 6.758373
       },
       {
         "rowCount": 80,
@@ -1352,7 +1352,7 @@
         "sqlBytes": 3210,
         "params": 320,
         "chunks": 1,
-        "ms": 31.673004
+        "ms": 26.209869
       },
       {
         "rowCount": 80,
@@ -1361,7 +1361,7 @@
         "sqlBytes": 7321,
         "params": 560,
         "chunks": 1,
-        "ms": 17.165201
+        "ms": 54.729282
       },
       {
         "rowCount": 80,
@@ -1370,7 +1370,7 @@
         "sqlBytes": 335,
         "params": 1,
         "chunks": 1,
-        "ms": 8.016402
+        "ms": 79.077887
       },
       {
         "rowCount": 100,
@@ -1379,7 +1379,7 @@
         "sqlBytes": 3970,
         "params": 400,
         "chunks": 1,
-        "ms": 33.739804
+        "ms": 30.163217
       },
       {
         "rowCount": 100,
@@ -1388,7 +1388,7 @@
         "sqlBytes": 9121,
         "params": 700,
         "chunks": 1,
-        "ms": 14.032155
+        "ms": 12.019319
       },
       {
         "rowCount": 100,
@@ -1397,7 +1397,7 @@
         "sqlBytes": 349,
         "params": 2,
         "chunks": 1,
-        "ms": 8.449253
+        "ms": 7.676988
       },
       {
         "rowCount": 1000,
@@ -1406,7 +1406,7 @@
         "sqlBytes": 38170,
         "params": 4000,
         "chunks": 1,
-        "ms": 1622.459927
+        "ms": 1212.498497
       },
       {
         "rowCount": 1000,
@@ -1415,7 +1415,7 @@
         "sqlBytes": 90121,
         "params": 7000,
         "chunks": 1,
-        "ms": 414.59471
+        "ms": 363.810396
       },
       {
         "rowCount": 1000,
@@ -1424,7 +1424,7 @@
         "sqlBytes": 517,
         "params": 14,
         "chunks": 1,
-        "ms": 51.875292
+        "ms": 42.550778
       },
       {
         "rowCount": 1000,
@@ -1433,7 +1433,7 @@
         "sqlBytes": 89676,
         "params": 21000,
         "chunks": 1,
-        "ms": 5990.674914
+        "ms": 5258.306148
       },
       {
         "rowCount": 1000,
@@ -1442,7 +1442,7 @@
         "sqlBytes": 583600,
         "params": 41000,
         "chunks": 1,
-        "ms": 8754.685094
+        "ms": 8452.581352
       },
       {
         "rowCount": 1000,
@@ -1451,7 +1451,7 @@
         "sqlBytes": 2388,
         "params": 78,
         "chunks": 1,
-        "ms": 236.424322
+        "ms": 240.724913
       },
       {
         "rowCount": 10000,
@@ -1459,8 +1459,8 @@
         "mode": "union",
         "sqlBytes": 380170,
         "params": 40000,
-        "chunks": 1,
-        "ms": 2081.945303
+        "chunks": 10,
+        "ms": 1719.369759
       },
       {
         "rowCount": 10000,
@@ -1468,8 +1468,8 @@
         "mode": "case",
         "sqlBytes": 900121,
         "params": 70000,
-        "chunks": 2,
-        "ms": 1199.873459
+        "chunks": 10,
+        "ms": 986.745735
       },
       {
         "rowCount": 10000,
@@ -1477,8 +1477,8 @@
         "mode": "json",
         "sqlBytes": 2309,
         "params": 142,
-        "chunks": 1,
-        "ms": 452.545279
+        "chunks": 10,
+        "ms": 352.598783
       },
       {
         "rowCount": 50000,
@@ -1486,8 +1486,8 @@
         "mode": "union",
         "sqlBytes": 1900170,
         "params": 200000,
-        "chunks": 4,
-        "ms": 4022.477384
+        "chunks": 50,
+        "ms": 4748.010159
       },
       {
         "rowCount": 50000,
@@ -1495,8 +1495,8 @@
         "mode": "case",
         "sqlBytes": 4500121,
         "params": 350000,
-        "chunks": 6,
-        "ms": 3935.742055
+        "chunks": 50,
+        "ms": 3204.14642
       },
       {
         "rowCount": 50000,
@@ -1504,8 +1504,8 @@
         "mode": "json",
         "sqlBytes": 10849,
         "params": 752,
-        "chunks": 1,
-        "ms": 1959.444816
+        "chunks": 50,
+        "ms": 1572.263636
       }
     ]
   },
@@ -1516,10 +1516,10 @@
         "rowCount": 3,
         "colCount": 3,
         "mode": "union",
-        "sqlBytes": 245,
+        "sqlBytes": 244,
         "params": 12,
         "chunks": 1,
-        "ms": 4.902132
+        "ms": 6.582853
       },
       {
         "rowCount": 3,
@@ -1528,25 +1528,25 @@
         "sqlBytes": 391,
         "params": 21,
         "chunks": 1,
-        "ms": 3.896812
+        "ms": 5.297097
       },
       {
         "rowCount": 3,
         "colCount": 3,
         "mode": "json",
-        "sqlBytes": 179,
+        "sqlBytes": 153,
         "params": 1,
         "chunks": 1,
-        "ms": 4.121329
+        "ms": 5.67035
       },
       {
         "rowCount": 5,
         "colCount": 3,
         "mode": "union",
-        "sqlBytes": 301,
+        "sqlBytes": 300,
         "params": 20,
         "chunks": 1,
-        "ms": 5.679911
+        "ms": 5.716158
       },
       {
         "rowCount": 5,
@@ -1555,25 +1555,25 @@
         "sqlBytes": 571,
         "params": 35,
         "chunks": 1,
-        "ms": 5.745859
+        "ms": 5.033771
       },
       {
         "rowCount": 5,
         "colCount": 3,
         "mode": "json",
-        "sqlBytes": 179,
+        "sqlBytes": 153,
         "params": 1,
         "chunks": 1,
-        "ms": 4.099587
+        "ms": 5.275885
       },
       {
         "rowCount": 10,
         "colCount": 3,
         "mode": "union",
-        "sqlBytes": 441,
+        "sqlBytes": 440,
         "params": 40,
         "chunks": 1,
-        "ms": 4.855689
+        "ms": 6.532723
       },
       {
         "rowCount": 10,
@@ -1582,25 +1582,25 @@
         "sqlBytes": 1021,
         "params": 70,
         "chunks": 1,
-        "ms": 4.495988
+        "ms": 6.090562
       },
       {
         "rowCount": 10,
         "colCount": 3,
         "mode": "json",
-        "sqlBytes": 179,
+        "sqlBytes": 153,
         "params": 1,
         "chunks": 1,
-        "ms": 3.960576
+        "ms": 5.592249
       },
       {
         "rowCount": 20,
         "colCount": 3,
         "mode": "union",
-        "sqlBytes": 721,
+        "sqlBytes": 720,
         "params": 80,
         "chunks": 1,
-        "ms": 6.43019
+        "ms": 7.244591
       },
       {
         "rowCount": 20,
@@ -1609,25 +1609,25 @@
         "sqlBytes": 1921,
         "params": 140,
         "chunks": 1,
-        "ms": 5.713671
+        "ms": 7.192792
       },
       {
         "rowCount": 20,
         "colCount": 3,
         "mode": "json",
-        "sqlBytes": 179,
+        "sqlBytes": 153,
         "params": 1,
         "chunks": 1,
-        "ms": 3.958172
+        "ms": 5.33437
       },
       {
         "rowCount": 50,
         "colCount": 3,
         "mode": "union",
-        "sqlBytes": 1561,
+        "sqlBytes": 1560,
         "params": 200,
         "chunks": 1,
-        "ms": 9.802613
+        "ms": 17.583204
       },
       {
         "rowCount": 50,
@@ -1636,25 +1636,25 @@
         "sqlBytes": 4621,
         "params": 350,
         "chunks": 1,
-        "ms": 8.78145
+        "ms": 10.111161
       },
       {
         "rowCount": 50,
         "colCount": 3,
         "mode": "json",
-        "sqlBytes": 179,
+        "sqlBytes": 153,
         "params": 1,
         "chunks": 1,
-        "ms": 4.921466
+        "ms": 5.848387
       },
       {
         "rowCount": 80,
         "colCount": 3,
         "mode": "union",
-        "sqlBytes": 2401,
+        "sqlBytes": 2400,
         "params": 320,
         "chunks": 1,
-        "ms": 16.6268
+        "ms": 19.433564
       },
       {
         "rowCount": 80,
@@ -1663,25 +1663,25 @@
         "sqlBytes": 7321,
         "params": 560,
         "chunks": 1,
-        "ms": 12.251657
+        "ms": 15.008528
       },
       {
         "rowCount": 80,
         "colCount": 3,
         "mode": "json",
-        "sqlBytes": 179,
+        "sqlBytes": 153,
         "params": 1,
         "chunks": 1,
-        "ms": 6.349641
+        "ms": 7.851023
       },
       {
         "rowCount": 100,
         "colCount": 3,
         "mode": "union",
-        "sqlBytes": 2961,
+        "sqlBytes": 2960,
         "params": 400,
         "chunks": 1,
-        "ms": 17.993789
+        "ms": 22.089728
       },
       {
         "rowCount": 100,
@@ -1690,25 +1690,25 @@
         "sqlBytes": 9121,
         "params": 700,
         "chunks": 1,
-        "ms": 12.908537
+        "ms": 15.351564
       },
       {
         "rowCount": 100,
         "colCount": 3,
         "mode": "json",
-        "sqlBytes": 179,
+        "sqlBytes": 153,
         "params": 1,
         "chunks": 1,
-        "ms": 15.901533
+        "ms": 7.617412
       },
       {
         "rowCount": 1000,
         "colCount": 3,
         "mode": "union",
-        "sqlBytes": 28161,
+        "sqlBytes": 28160,
         "params": 4000,
         "chunks": 1,
-        "ms": 539.638104
+        "ms": 631.802143
       },
       {
         "rowCount": 1000,
@@ -1716,26 +1716,26 @@
         "mode": "case",
         "sqlBytes": 90121,
         "params": 7000,
-        "chunks": 1,
-        "ms": 151.92967
+        "chunks": 4,
+        "ms": 117.417941
       },
       {
         "rowCount": 1000,
         "colCount": 3,
         "mode": "json",
-        "sqlBytes": 179,
+        "sqlBytes": 153,
         "params": 1,
         "chunks": 1,
-        "ms": 63.159828
+        "ms": 34.911137
       },
       {
         "rowCount": 1000,
         "colCount": 20,
         "mode": "union",
-        "sqlBytes": 79718,
+        "sqlBytes": 79717,
         "params": 21000,
         "chunks": 1,
-        "ms": 878.140249
+        "ms": 993.706094
       },
       {
         "rowCount": 1000,
@@ -1743,26 +1743,26 @@
         "mode": "case",
         "sqlBytes": 583600,
         "params": 41000,
-        "chunks": 1,
-        "ms": 965.697654
+        "chunks": 20,
+        "ms": 528.268012
       },
       {
         "rowCount": 1000,
         "colCount": 20,
         "mode": "json",
-        "sqlBytes": 685,
+        "sqlBytes": 462,
         "params": 1,
         "chunks": 1,
-        "ms": 227.425764
+        "ms": 74.504584
       },
       {
         "rowCount": 10000,
         "colCount": 3,
         "mode": "union",
-        "sqlBytes": 280161,
+        "sqlBytes": 280160,
         "params": 40000,
-        "chunks": 1,
-        "ms": 5469.653616
+        "chunks": 10,
+        "ms": 6739.434307
       },
       {
         "rowCount": 10000,
@@ -1770,26 +1770,26 @@
         "mode": "case",
         "sqlBytes": 900121,
         "params": 70000,
-        "chunks": 2,
-        "ms": 1500.380387
+        "chunks": 31,
+        "ms": 1169.892216
       },
       {
         "rowCount": 10000,
         "colCount": 3,
         "mode": "json",
-        "sqlBytes": 179,
+        "sqlBytes": 153,
         "params": 1,
-        "chunks": 1,
-        "ms": 4527.099533
+        "chunks": 10,
+        "ms": 249.281135
       },
       {
         "rowCount": 50000,
         "colCount": 3,
         "mode": "union",
-        "sqlBytes": 1400161,
+        "sqlBytes": 1400160,
         "params": 200000,
-        "chunks": 4,
-        "ms": 115733.897604
+        "chunks": 50,
+        "ms": 128856.488497
       },
       {
         "rowCount": 50000,
@@ -1797,17 +1797,17 @@
         "mode": "case",
         "sqlBytes": 4500121,
         "params": 350000,
-        "chunks": 6,
-        "ms": 7585.794604
+        "chunks": 151,
+        "ms": 5818.268079
       },
       {
         "rowCount": 50000,
         "colCount": 3,
         "mode": "json",
-        "sqlBytes": 179,
+        "sqlBytes": 153,
         "params": 1,
-        "chunks": 1,
-        "ms": 110231.637105
+        "chunks": 50,
+        "ms": 1353.315723
       }
     ]
   },
@@ -1821,7 +1821,7 @@
         "sqlBytes": 218,
         "params": 12,
         "chunks": 1,
-        "ms": 1.715829
+        "ms": 2.618042
       },
       {
         "rowCount": 3,
@@ -1830,7 +1830,7 @@
         "sqlBytes": 391,
         "params": 21,
         "chunks": 1,
-        "ms": 2.018043
+        "ms": 1.818852
       },
       {
         "rowCount": 3,
@@ -1839,7 +1839,7 @@
         "sqlBytes": 264,
         "params": 5,
         "chunks": 1,
-        "ms": 7.133582
+        "ms": 1.952502
       },
       {
         "rowCount": 5,
@@ -1848,7 +1848,7 @@
         "sqlBytes": 274,
         "params": 20,
         "chunks": 1,
-        "ms": 2.0291
+        "ms": 1.684901
       },
       {
         "rowCount": 5,
@@ -1857,7 +1857,7 @@
         "sqlBytes": 571,
         "params": 35,
         "chunks": 1,
-        "ms": 1.961178
+        "ms": 1.633944
       },
       {
         "rowCount": 5,
@@ -1866,7 +1866,7 @@
         "sqlBytes": 264,
         "params": 5,
         "chunks": 1,
-        "ms": 1.846355
+        "ms": 1.624099
       },
       {
         "rowCount": 10,
@@ -1875,7 +1875,7 @@
         "sqlBytes": 414,
         "params": 40,
         "chunks": 1,
-        "ms": 1.787387
+        "ms": 1.608906
       },
       {
         "rowCount": 10,
@@ -1884,7 +1884,7 @@
         "sqlBytes": 1021,
         "params": 70,
         "chunks": 1,
-        "ms": 1.793495
+        "ms": 1.641696
       },
       {
         "rowCount": 10,
@@ -1893,7 +1893,7 @@
         "sqlBytes": 264,
         "params": 5,
         "chunks": 1,
-        "ms": 1.9092
+        "ms": 1.652101
       },
       {
         "rowCount": 20,
@@ -1902,7 +1902,7 @@
         "sqlBytes": 694,
         "params": 80,
         "chunks": 1,
-        "ms": 1.98895
+        "ms": 1.610649
       },
       {
         "rowCount": 20,
@@ -1910,8 +1910,8 @@
         "mode": "case",
         "sqlBytes": 1921,
         "params": 140,
-        "chunks": 1,
-        "ms": 2.344074
+        "chunks": 2,
+        "ms": 1.862136
       },
       {
         "rowCount": 20,
@@ -1920,7 +1920,7 @@
         "sqlBytes": 264,
         "params": 5,
         "chunks": 1,
-        "ms": 1.859255
+        "ms": 1.558601
       },
       {
         "rowCount": 50,
@@ -1929,7 +1929,7 @@
         "sqlBytes": 1534,
         "params": 200,
         "chunks": 1,
-        "ms": 2.63488
+        "ms": 2.065472
       },
       {
         "rowCount": 50,
@@ -1937,8 +1937,8 @@
         "mode": "case",
         "sqlBytes": 4621,
         "params": 350,
-        "chunks": 1,
-        "ms": 3.660191
+        "chunks": 4,
+        "ms": 2.660355
       },
       {
         "rowCount": 50,
@@ -1947,7 +1947,7 @@
         "sqlBytes": 264,
         "params": 5,
         "chunks": 1,
-        "ms": 2.248399
+        "ms": 1.752112
       },
       {
         "rowCount": 80,
@@ -1956,7 +1956,7 @@
         "sqlBytes": 2374,
         "params": 320,
         "chunks": 1,
-        "ms": 5.004061
+        "ms": 2.353505
       },
       {
         "rowCount": 80,
@@ -1964,8 +1964,8 @@
         "mode": "case",
         "sqlBytes": 7321,
         "params": 560,
-        "chunks": 1,
-        "ms": 4.33124
+        "chunks": 5,
+        "ms": 2.912394
       },
       {
         "rowCount": 80,
@@ -1974,7 +1974,7 @@
         "sqlBytes": 264,
         "params": 5,
         "chunks": 1,
-        "ms": 2.311204
+        "ms": 2.003759
       },
       {
         "rowCount": 100,
@@ -1983,7 +1983,7 @@
         "sqlBytes": 2934,
         "params": 400,
         "chunks": 1,
-        "ms": 2.644074
+        "ms": 2.378172
       },
       {
         "rowCount": 100,
@@ -1991,8 +1991,8 @@
         "mode": "case",
         "sqlBytes": 9121,
         "params": 700,
-        "chunks": 1,
-        "ms": 5.05608
+        "chunks": 7,
+        "ms": 4.030594
       },
       {
         "rowCount": 100,
@@ -2001,7 +2001,7 @@
         "sqlBytes": 264,
         "params": 5,
         "chunks": 1,
-        "ms": 2.586097
+        "ms": 2.354972
       },
       {
         "rowCount": 1000,
@@ -2010,7 +2010,7 @@
         "sqlBytes": 28134,
         "params": 4000,
         "chunks": 2,
-        "ms": 9.849635
+        "ms": 9.050202
       },
       {
         "rowCount": 1000,
@@ -2018,8 +2018,8 @@
         "mode": "case",
         "sqlBytes": 90121,
         "params": 7000,
-        "chunks": 1,
-        "ms": 94.739663
+        "chunks": 63,
+        "ms": 23.419924
       },
       {
         "rowCount": 1000,
@@ -2028,7 +2028,7 @@
         "sqlBytes": 264,
         "params": 5,
         "chunks": 1,
-        "ms": 4.327905
+        "ms": 4.237595
       },
       {
         "rowCount": 1000,
@@ -2037,7 +2037,7 @@
         "sqlBytes": 79589,
         "params": 21000,
         "chunks": 2,
-        "ms": 36.522587
+        "ms": 23.934957
       },
       {
         "rowCount": 1000,
@@ -2045,8 +2045,8 @@
         "mode": "case",
         "sqlBytes": 583600,
         "params": 41000,
-        "chunks": 2,
-        "ms": 2863.07457
+        "chunks": 500,
+        "ms": 125.541662
       },
       {
         "rowCount": 1000,
@@ -2055,7 +2055,7 @@
         "sqlBytes": 1127,
         "params": 22,
         "chunks": 1,
-        "ms": 28.743612
+        "ms": 24.700217
       },
       {
         "rowCount": 10000,
@@ -2064,7 +2064,7 @@
         "sqlBytes": 280134,
         "params": 40000,
         "chunks": 20,
-        "ms": 65.706464
+        "ms": 53.02742
       },
       {
         "rowCount": 10000,
@@ -2072,8 +2072,8 @@
         "mode": "case",
         "sqlBytes": 900121,
         "params": 70000,
-        "chunks": 3,
-        "ms": 897.095126
+        "chunks": 625,
+        "ms": 158.491337
       },
       {
         "rowCount": 10000,
@@ -2081,8 +2081,8 @@
         "mode": "json",
         "sqlBytes": 264,
         "params": 5,
-        "chunks": 1,
-        "ms": 27.120581
+        "chunks": 10,
+        "ms": 22.820613
       },
       {
         "rowCount": 50000,
@@ -2091,7 +2091,7 @@
         "sqlBytes": 1400134,
         "params": 200000,
         "chunks": 100,
-        "ms": 301.488082
+        "ms": 233.873967
       },
       {
         "rowCount": 50000,
@@ -2099,8 +2099,8 @@
         "mode": "case",
         "sqlBytes": 4500121,
         "params": 350000,
-        "chunks": 11,
-        "ms": 4475.001077
+        "chunks": 3125,
+        "ms": 762.605876
       },
       {
         "rowCount": 50000,
@@ -2108,8 +2108,8 @@
         "mode": "json",
         "sqlBytes": 264,
         "params": 5,
-        "chunks": 1,
-        "ms": 139.046307
+        "chunks": 50,
+        "ms": 119.342537
       }
     ]
   }

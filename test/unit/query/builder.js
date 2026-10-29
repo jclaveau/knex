@@ -1895,6 +1895,19 @@ describe('QueryBuilder', () => {
       );
   });
 
+  it('the pg compiler refuses an arrayParameterThreshold written into the client config after construction', () => {
+    const client = new PG_Client({ client: 'pg' });
+    client.config.arrayParameterThreshold = 70000;
+    expect(() => {
+      client.queryBuilder().from('users').whereIn('id', [1]).toSQL();
+    })
+      .to.throw(TypeError)
+      .with.property(
+        'message',
+        "arrayParameterThreshold 70000 exceeds the client's maxBindParameters 65535"
+      );
+  });
+
   it('a refused orWhereNotIn option leaves no not or or flag for the next where', () => {
     const builder = qb().select('*').from('users').where('a', 1);
     expect(() => {

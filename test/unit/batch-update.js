@@ -1420,6 +1420,15 @@ describe('batchUpdate (db-less)', function () {
       expect(clients['pg'].client.batchUpdateRowLimit('union', 2, 3)).to.equal(
         Infinity
       );
+      expect(
+        clients['sqlite3'].client.batchUpdateRowLimit('case', 2, 10)
+      ).to.equal(5);
+      expect(
+        clients['sqlite3'].client.batchUpdateRowLimit('case', 1, 100)
+      ).to.equal(1);
+      expect(
+        clients['sqlite3'].client.batchUpdateRowLimit('union', 2, 3)
+      ).to.equal(500);
     });
 
     it('throws on Redshift for bytea/jsonb casts it has no type for', function () {
@@ -1519,9 +1528,12 @@ describe('batchUpdate (db-less)', function () {
           ['id'],
           'throw'
         )
-      ).to.throw(
-        `Invalid batch: duplicate key [{"a":1}] (use onDuplicateKey: 'last' to keep the last row instead)`
-      );
+      )
+        .to.throw(Error)
+        .with.property(
+          'message',
+          `Invalid batch: duplicate key [{"a":1}] (use onDuplicateKey: 'last' to keep the last row instead)`
+        );
     });
 
     it('throws on a duplicate object key holding a bigint when requested', function () {
@@ -1534,9 +1546,12 @@ describe('batchUpdate (db-less)', function () {
           ['id'],
           'throw'
         )
-      ).to.throw(
-        `Invalid batch: duplicate key [{"a":"1"}] (use onDuplicateKey: 'last' to keep the last row instead)`
-      );
+      )
+        .to.throw(Error)
+        .with.property(
+          'message',
+          `Invalid batch: duplicate key [{"a":"1"}] (use onDuplicateKey: 'last' to keep the last row instead)`
+        );
     });
 
     it('keeps non-plain object keys as distinct rows', function () {
@@ -1607,9 +1622,12 @@ describe('batchUpdate (db-less)', function () {
           ['id'],
           'throw'
         )
-      ).to.throw(
-        `Invalid batch: duplicate key ["[Raw]"] (use onDuplicateKey: 'last' to keep the last row instead)`
-      );
+      )
+        .to.throw(Error)
+        .with.property(
+          'message',
+          `Invalid batch: duplicate key ["[Raw]"] (use onDuplicateKey: 'last' to keep the last row instead)`
+        );
     });
 
     it('keeps raw composite keys as distinct rows', function () {
@@ -1658,9 +1676,12 @@ describe('batchUpdate (db-less)', function () {
           ['a', 'b'],
           'throw'
         )
-      ).to.throw(
-        `Invalid batch: duplicate key ["[Raw]",1] (use onDuplicateKey: 'last' to keep the last row instead)`
-      );
+      )
+        .to.throw(Error)
+        .with.property(
+          'message',
+          `Invalid batch: duplicate key ["[Raw]",1] (use onDuplicateKey: 'last' to keep the last row instead)`
+        );
     });
 
     it('keeps non-plain object composite keys as distinct rows', function () {

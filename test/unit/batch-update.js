@@ -396,6 +396,32 @@ describe('batchUpdate (db-less)', function () {
     }
   });
 
+  it('refuses .returning() on an empty batch as on a non-empty one', async function () {
+    let sqliteError;
+    try {
+      await clients['sqlite3'].batchUpdate('users', []).returning('id');
+    } catch (caught) {
+      sqliteError = caught;
+    }
+    let caseError;
+    try {
+      await clients['pg']
+        .batchUpdate('users', [], 'id', { mode: 'case' })
+        .returning('id');
+    } catch (caught) {
+      caseError = caught;
+    }
+    expect(sqliteError.message).to.equal(
+      '.batchUpdate().returning() is not supported for sqlite3'
+    );
+    expect(caseError.message).to.equal(
+      ".batchUpdate().returning() is not supported with mode 'case'"
+    );
+    expect(await clients['pg'].batchUpdate('users', []).returning('id')).to.eql(
+      []
+    );
+  });
+
   it("throws for .returning() in 'json' mode on sqlite3", function () {
     expect(() =>
       clients['sqlite3']('users')

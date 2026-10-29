@@ -350,6 +350,26 @@ describe('batchUpdate (db-less)', function () {
     });
   });
 
+  it('leaves a null uncast before a raw cell of its column (postgres)', function () {
+    const knex = clients['pg'];
+    expect(
+      knex('users')
+        .batchUpdate(
+          [
+            { id: 1, age: null },
+            { id: 2, age: knex.raw('42') },
+          ],
+          ['id'],
+          ['age']
+        )
+        .toSQL()
+        .toNative()
+    ).to.eql({
+      sql: 'update "users" set "age" = "v"."age" from (select $1::bigint as "id", $2 as "age" union all select $3, 42) as "v" where "users"."id" = "v"."id"',
+      bindings: [1, null, 2],
+    });
+  });
+
   it('compiles a function value as an uncast subquery (postgres)', function () {
     expect(
       clients['pg']('users')

@@ -30,8 +30,8 @@ _Type detection is excluded as a one-time, cacheable cost._ Every mode times the
 charged to the curve.
 
 `1.0` is `union` (its own baseline); below the line is faster. `json` sits at
-~0.25–0.4× union across the whole sweep; `case` starts competitive but climbs
-past 1.0 as batches grow.
+0.22–0.29× union from 1000 rows up and 0.53–0.93× below; `case` stays near 1.0
+(0.79–1.22×) at every size.
 
 ## What each mode emits
 
@@ -42,46 +42,49 @@ past 1.0 as batches grow.
   One universal statement, every dialect. Values sit in assignment context, so
   **no Postgres casts**.
 - **json** — the whole chunk rides as **one** JSON parameter, expanded server
-  side: pg `jsonb_to_recordset(?)` with a typed column list, sqlite
-  `json_each(?)` + `UPDATE … FROM`. Constant parameter count.
+  side: pg `jsonb_populate_recordset(null::<table>, ?)` (typed by the table's
+  row type), sqlite `json_each(?)` + `UPDATE … FROM`, mysql/mariadb/oracle
+  `JSON_TABLE`, mssql `OPENJSON`. Constant parameter count.
 
 ## Measured — SQLite (in-memory, the one embedded dialect that runs all three)
 
-|  rows | cols | mode  | SQL bytes | params |                                    exec ms |
-| ----: | ---: | ----- | --------: | -----: | -----------------------------------------: |
-|   100 |    3 | union |     2,934 |    400 |                                        3.7 |
-|   100 |    3 | case  |    10,801 |    700 |                                        8.5 |
-|   100 |    3 | json  |       264 |      5 |                                        2.7 |
-|  1000 |    3 | union |         — |      — | **ERR: too many terms in compound SELECT** |
-|  1000 |    3 | case  |         — |      — |      **ERR: Expression tree is too large** |
-|  1000 |    3 | json  |       264 |      5 |                                        5.9 |
-|  1000 |   20 | union |         — |      — | **ERR: too many terms in compound SELECT** |
-|  1000 |   20 | case  |   600,580 | 41,000 |                                    6,539.6 |
-|  1000 |   20 | json  |     1,127 |     22 |                                       74.2 |
-| 10000 |    3 | json  |       264 |      5 |                                       72.3 |
+CI run of 0c32392c, with the union cap of 500 rows and the `'case'` cap of
+[SQLite case chunk size](#sqlite-case-chunk-size):
 
-(union/case at 10000×3 fail the same way as 1000×3 — omitted.)
+|  rows | cols | mode  | SQL bytes | params | chunks | exec ms |
+| ----: | ---: | ----- | --------: | -----: | -----: | ------: |
+|   100 |    3 | union |     2,934 |    400 |      1 |     2.4 |
+|   100 |    3 | case  |     9,121 |    700 |      7 |     4.0 |
+|   100 |    3 | json  |       264 |      5 |      1 |     2.4 |
+|  1000 |    3 | union |    28,134 |  4,000 |      2 |     9.1 |
+|  1000 |    3 | case  |    90,121 |  7,000 |     63 |    23.4 |
+|  1000 |    3 | json  |       264 |      5 |      1 |     4.2 |
+|  1000 |   20 | union |    79,589 | 21,000 |      2 |    23.9 |
+|  1000 |   20 | case  |   583,600 | 41,000 |    500 |   125.5 |
+|  1000 |   20 | json  |     1,127 |     22 |      1 |    24.7 |
+| 10000 |    3 | union |   280,134 | 40,000 |     20 |    53.0 |
+| 10000 |    3 | case  |   900,121 | 70,000 |    625 |   158.5 |
+| 10000 |    3 | json  |       264 |      5 |      1 |    22.8 |
 
 ## Findings
 
-- **json is the clear winner at scale.** SQL size and parameter count are
-  _constant in the row count_ (one JSON param), so it sidesteps every
-  per-statement limit. At 1000×20 it is ~88× faster than `case` (74ms vs 6.5s)
-  and emits 1.1KB instead of 600KB.
-- **case explodes with width.** Its SQL grows as `rows × columns` and re-binds
-  the key in every branch, so 1000×20 is 600KB / 41k params. Its only wins are
-  no per-dialect dispatch and no Postgres casts.
-- **union is bounded by more than bind parameters.** Beyond `maxBindParameters`
-  it also hits each engine's compound-query limits — SQLite's
+- **json wins at scale.** SQL size and parameter count are _constant in the
+  row count_ (one JSON param plus the `json_extract` paths), so it sidesteps
+  every per-statement limit: 10000×3 runs in 22.8 ms vs 53.0 ms `union` and
+  158.5 ms `case`. At 1000×20 it ties `union` (24.7 ms vs 23.9 ms).
+- **case grows with width.** Its SQL grows as `rows × columns` and re-binds
+  the key in every branch, so 1000×20 is 583KB / 41k params, run as 500
+  two-row chunks. Its only wins are no per-dialect dispatch, no Postgres casts
+  and raw values that read the target row.
+- **union is bounded by more than bind parameters.** SQLite's
   `SQLITE_MAX_COMPOUND_SELECT` (500 UNION terms) trips well before the bind
-  limit. The chunk cap currently models only parameters, so the default
-  `chunkSize` (1000) overflows union on SQLite. **Follow-up:** model a
-  per-dialect compound-select / expression-depth cap the same way
-  `maxBindParameters` is modelled.
-- **case hits expression-depth limits too** (`SQLITE_MAX_EXPR_DEPTH`), so it is
-  not a free "universal" escape hatch for large batches either.
+  limit, so `Client_SQLite3#batchUpdateRowLimit` caps a union chunk at 500
+  rows.
+- **case hits expression-depth limits too** (`SQLITE_MAX_EXPR_DEPTH`): a
+  composite key's OR-joined WHERE deepens with every row, which the `'case'`
+  chunk cap keeps far below the limit.
 
-## Measured — PostgreSQL (CI service, postgres:16)
+## Measured — PostgreSQL (CI service, postgres:17)
 
 Postgres has no small compound-SELECT cap, so `union` runs at every size here —
 which lets the three be compared head to head.
@@ -101,7 +104,8 @@ CI run of 0c32392c, with the `'case'` chunk cap of
 | 10000×3   | case  |   900,121 | 70,000 |     31 |     331 |
 | 10000×3   | json  |       153 |  **1** |      1 | **101** |
 
-`columnTypes` overhead (pg, json, 1000×5): `from_data` 9.2ms, `from_db` 16.7ms.
+`columnTypes` overhead (pg, union, 1000×5; pg `json` takes its types from the
+row type and refuses `from_db`): `from_data` 9.2ms, `from_db` 16.7ms.
 
 Postgres findings:
 
@@ -120,7 +124,8 @@ Postgres findings:
 ## columnTypes strategies (union + json)
 
 `columnTypes` decides where the per-column DB types come from (used by `union`'s
-casts and `json`'s column-definition list):
+Postgres casts and the `JSON_TABLE`/`OPENJSON` column list of `json` mode;
+pg `json` reads the table's row type instead):
 
 - **object** `{ id: 'uuid' }` — explicit; unlisted columns fall back to `from_data`.
 - **`'from_data'`** (default) — infer from the JS values. Free, but blind to
@@ -136,21 +141,21 @@ reports the bare `ARRAY`), so array columns may need the explicit object.
 
 ## Limitations matrix
 
-| mode  | dialects implemented                                                             | Postgres casts?               | per-row params          | extra limits                                                   |
-| ----- | -------------------------------------------------------------------------------- | ----------------------------- | ----------------------- | -------------------------------------------------------------- |
-| union | all 7                                                                            | needed (unknown-typed source) | keys + columns          | compound-SELECT / MERGE source term caps                       |
-| case  | all 7 (universal SQL)                                                            | none (assignment context)     | columns×(keys+1) + keys | expression-tree depth; SQL size = rows×columns                 |
-| json  | pg, sqlite (mysql/mssql/oracle = JSON_TABLE/OPENJSON TODO; redshift unsupported) | none (typed column list)      | 1 per chunk             | values must be JSON-serializable (no Buffer; bigint as string) |
+| mode  | dialects implemented                       | Postgres casts?               | per-row params          | extra limits                                                   |
+| ----- | ------------------------------------------ | ----------------------------- | ----------------------- | -------------------------------------------------------------- |
+| union | all 7                                      | needed (unknown-typed source) | keys + columns          | compound-SELECT / MERGE source term caps                       |
+| case  | all 7 (universal SQL)                      | none (assignment context)     | columns×(keys+1) + keys | expression-tree depth; SQL size = rows×columns                 |
+| json  | all but redshift (no JSON-rowset function) | none (row type / column list) | 1 per chunk             | values must be JSON-serializable (no Buffer; bigint as string) |
 
 ## Tentative recommendation (for discussion)
 
 - Keep **union** as the portable default (works everywhere, linear in rows).
-- Offer **json** as the high-throughput path on Postgres (and SQLite) — it is
-  dramatically better for large/wide batches and removes the cast machinery.
+- Offer **json** as the high-throughput path — at 3 columns it is the fastest
+  mode from 1000 rows up on every dialect, at 1000×20 within 11% of `union` on
+  MySQL, MariaDB and SQLite, and it removes the cast machinery.
 - Treat **case** as a niche fallback (cast-free, single dialect-agnostic
-  statement) but warn against it for wide tables.
-- Before any of these is safe at large `chunkSize`, the chunker needs the
-  compound-select / expression-depth caps noted above.
+  statement, raw values that read the target row) but warn against it for wide
+  tables.
 
 ## SQLite case chunk size
 
@@ -209,7 +214,7 @@ updating 2000 rows of an analyzed 10000-row table (shipped 50 beats 5 and 1000),
 so a PostgreSQL release that changes this fails CI: re-run the sweep and move
 the cap.
 
-PostgreSQL (postgres:16):
+PostgreSQL (postgres:17):
 
 | keys | cols |    5 |   10 |   25 |   50 |  100 |  250 |  500 |  1000 | shipped cap |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ----: | ----------: |

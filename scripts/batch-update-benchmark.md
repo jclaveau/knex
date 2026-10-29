@@ -44,7 +44,8 @@ charged to the curve.
 - **json** — the whole chunk rides as **one** JSON parameter, expanded server
   side: pg `jsonb_populate_recordset(null::<table>, ?)` (typed by the table's
   row type), sqlite `json_each(?)` + `UPDATE … FROM`, mysql/mariadb/oracle
-  `JSON_TABLE`, mssql `OPENJSON`. Constant parameter count.
+  `JSON_TABLE`, mssql `OPENJSON`. Constant parameter count per chunk (chunks
+  of the default `chunkSize`, 1000 rows).
 
 ## Measured — SQLite (in-memory, the one embedded dialect that runs all three)
 
@@ -64,7 +65,7 @@ CI run of 0c32392c, with the union cap of 500 rows and the `'case'` cap of
 |  1000 |   20 | json  |     1,127 |     22 |      1 |    24.7 |
 | 10000 |    3 | union |   280,134 | 40,000 |     20 |    53.0 |
 | 10000 |    3 | case  |   900,121 | 70,000 |    625 |   158.5 |
-| 10000 |    3 | json  |       264 |      5 |      1 |    22.8 |
+| 10000 |    3 | json  |       264 |      5 |     10 |    22.8 |
 
 ## Findings
 
@@ -100,9 +101,9 @@ CI run of 0c32392c, with the `'case'` chunk cap of
 | 1000×20   | union |    79,717 | 21,000 |      1 |     106 |
 | 1000×20   | case  |   583,600 | 41,000 |     20 |     170 |
 | 1000×20   | json  |       462 |  **1** |      1 |  **36** |
-| 10000×3   | union |   280,160 | 40,000 |      1 |     387 |
+| 10000×3   | union |   280,160 | 40,000 |     10 |     387 |
 | 10000×3   | case  |   900,121 | 70,000 |     31 |     331 |
-| 10000×3   | json  |       153 |  **1** |      1 | **101** |
+| 10000×3   | json  |       153 |  **1** |     10 | **101** |
 
 `columnTypes` overhead (pg, union, 1000×5; pg `json` takes its types from the
 row type and refuses `from_db`): `from_data` 9.2ms, `from_db` 16.7ms.
@@ -110,7 +111,7 @@ row type and refuses `from_db`): `from_data` 9.2ms, `from_db` 16.7ms.
 Postgres findings:
 
 - **json wins decisively** — one bound parameter and a flat ~153-byte statement
-  regardless of size; ~3.8× faster than `union` and ~3.3× faster than `case` at
+  per 1000-row chunk, whatever the row width; ~3.8× faster than `union` and ~3.3× faster than `case` at
   10000×3. (Note: pg json binds **1** param vs sqlite's 5 — sqlite also binds the
   `json_extract` path strings.)
 - **union is solid on pg** (no compound-SELECT limit) but grows linearly — 280KB
@@ -162,8 +163,10 @@ reports the bare `ARRAY`), so array columns may need the explicit object.
 `Client_SQLite3#batchUpdateRowLimit` caps a `'case'` chunk at
 `floor(CASE_BRANCH_BUDGET / columns)` rows (at least 1), with
 `CASE_BRANCH_BUDGET = 50`. SQLite walks each column's CASE list for every row it
-updates, so a statement costs about rows × columns × chunk: the chunk that runs
-fastest holds about 50 branches (rows × columns), whatever the key. The knex
+updates, so a statement costs about rows × columns × chunk: from 10 columns up
+the chunk that runs fastest holds about 50 branches (rows × columns), whatever
+the key; on 1 to 3 columns the timings are close and the best chunk lies
+between 10 and 100 rows. The knex
 compile cost is flat (~100 ms per 2000 rows at every chunk size); the rest is
 SQLite's evaluation. A cap that small also keeps a composite key's OR-joined
 WHERE, rows + keys + 1 deep, under `SQLITE_MAX_EXPR_DEPTH` (1000).

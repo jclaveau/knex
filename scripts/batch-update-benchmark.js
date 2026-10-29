@@ -134,19 +134,22 @@ function measureStatement(knex, columns, rows, mode, columnTypes) {
   return { sqlBytes: compiled.sql.length, params: compiled.bindings.length };
 }
 
+// timeExecution passes no chunkSize, so the executor chunks at its default.
+const DEFAULT_CHUNK_SIZE = 1000;
+
 function chunksNeeded(knex, columns, rows, mode) {
   const limit = knex.client.maxBindParameters || Infinity;
-  if (mode === 'json') {
-    return 1; // one parameter per chunk regardless of row count
-  }
   const perRow =
-    mode === 'case'
+    mode === 'json'
+      ? 0 // one parameter per chunk regardless of row count
+      : mode === 'case'
       ? columns.length * 2 + 1 // each column matches the row's key, plus the WHERE key
       : columns.length + 1; // union: one value per cell (key + columns)
-  // Mirror the executor: the tighter of the bind-parameter cap and any
-  // structural per-statement row cap (e.g. SQLite's compound-SELECT limit).
+  // Mirror the executor: the tightest of chunkSize, the bind-parameter cap and
+  // any structural per-statement row cap (e.g. SQLite's compound-SELECT limit).
   const maxRows = Math.min(
-    Math.max(1, Math.floor(limit / perRow)),
+    DEFAULT_CHUNK_SIZE,
+    perRow > 0 ? Math.max(1, Math.floor(limit / perRow)) : Infinity,
     knex.client.batchUpdateRowLimit(mode, 1, columns.length)
   );
   return Math.ceil(rows.length / maxRows);

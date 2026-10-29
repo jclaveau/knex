@@ -426,11 +426,6 @@ describe('Where', function () {
               ['text_key', textKeys],
             ]) {
               expect(
-                knex('array_parameter_keys').whereIn(column, keys).toSQL().sql
-              ).to.equal(
-                `select * from "array_parameter_keys" where "${column}" = any(?)`
-              );
-              expect(
                 await knex('array_parameter_keys')
                   .whereIn(column, keys)
                   .orderBy('text_key')
@@ -443,6 +438,16 @@ describe('Where', function () {
               ).to.deep.equal(['c']);
             }
           }
+          expect(
+            knex('array_parameter_keys')
+              .whereIn(
+                'int_key',
+                Array.from({ length: 1001 }, (_, index) => index)
+              )
+              .toSQL().sql
+          ).to.equal(
+            'select * from "array_parameter_keys" where "int_key" = any(?)'
+          );
           expect(
             await knex('array_parameter_keys')
               .whereIn(

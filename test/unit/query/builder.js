@@ -1852,37 +1852,105 @@ describe('QueryBuilder', () => {
       );
   });
 
-  for (const [arrayParameterThreshold, message] of [
-    [-2, 'Invalid arrayParameterThreshold: -2'],
-    [1.5, 'Invalid arrayParameterThreshold: 1.5'],
-    [NaN, 'Invalid arrayParameterThreshold: NaN'],
-    [Infinity, 'Invalid arrayParameterThreshold: Infinity'],
-    ['1000', 'Invalid arrayParameterThreshold: 1000'],
-  ]) {
-    it(`where in refuses arrayParameterThreshold ${String(
-      arrayParameterThreshold
-    )} (${typeof arrayParameterThreshold})`, () => {
-      expect(() => {
-        qb()
-          .select('*')
-          .from('users')
-          .whereIn('id', [1], { arrayParameterThreshold })
-          .toSQL();
-      })
-        .to.throw(TypeError)
-        .with.property('message', message);
-    });
+  it('where in refuses arrayParameterThreshold -2 (number)', () => {
+    expect(() => {
+      qb()
+        .select('*')
+        .from('users')
+        .whereIn('id', [1], { arrayParameterThreshold: -2 })
+        .toSQL();
+    })
+      .to.throw(TypeError)
+      .with.property('message', 'Invalid arrayParameterThreshold: -2');
+  });
 
-    it(`the pg client refuses arrayParameterThreshold ${String(
-      arrayParameterThreshold
-    )} (${typeof arrayParameterThreshold}) in its config`, () => {
-      expect(() => {
-        new PG_Client({ client: 'pg', arrayParameterThreshold });
-      })
-        .to.throw(TypeError)
-        .with.property('message', message);
-    });
-  }
+  it('where in refuses arrayParameterThreshold 1.5 (number)', () => {
+    expect(() => {
+      qb()
+        .select('*')
+        .from('users')
+        .whereIn('id', [1], { arrayParameterThreshold: 1.5 })
+        .toSQL();
+    })
+      .to.throw(TypeError)
+      .with.property('message', 'Invalid arrayParameterThreshold: 1.5');
+  });
+
+  it('where in refuses arrayParameterThreshold NaN (number)', () => {
+    expect(() => {
+      qb()
+        .select('*')
+        .from('users')
+        .whereIn('id', [1], { arrayParameterThreshold: NaN })
+        .toSQL();
+    })
+      .to.throw(TypeError)
+      .with.property('message', 'Invalid arrayParameterThreshold: NaN');
+  });
+
+  it('where in refuses arrayParameterThreshold Infinity (number)', () => {
+    expect(() => {
+      qb()
+        .select('*')
+        .from('users')
+        .whereIn('id', [1], { arrayParameterThreshold: Infinity })
+        .toSQL();
+    })
+      .to.throw(TypeError)
+      .with.property('message', 'Invalid arrayParameterThreshold: Infinity');
+  });
+
+  it('where in refuses arrayParameterThreshold 1000 (string)', () => {
+    expect(() => {
+      qb()
+        .select('*')
+        .from('users')
+        .whereIn('id', [1], { arrayParameterThreshold: '1000' })
+        .toSQL();
+    })
+      .to.throw(TypeError)
+      .with.property('message', 'Invalid arrayParameterThreshold: 1000');
+  });
+
+  it('the pg client refuses arrayParameterThreshold -2 (number) in its config', () => {
+    expect(() => {
+      new PG_Client({ client: 'pg', arrayParameterThreshold: -2 });
+    })
+      .to.throw(TypeError)
+      .with.property('message', 'Invalid arrayParameterThreshold: -2');
+  });
+
+  it('the pg client refuses arrayParameterThreshold 1.5 (number) in its config', () => {
+    expect(() => {
+      new PG_Client({ client: 'pg', arrayParameterThreshold: 1.5 });
+    })
+      .to.throw(TypeError)
+      .with.property('message', 'Invalid arrayParameterThreshold: 1.5');
+  });
+
+  it('the pg client refuses arrayParameterThreshold NaN (number) in its config', () => {
+    expect(() => {
+      new PG_Client({ client: 'pg', arrayParameterThreshold: NaN });
+    })
+      .to.throw(TypeError)
+      .with.property('message', 'Invalid arrayParameterThreshold: NaN');
+  });
+
+  it('the pg client refuses arrayParameterThreshold Infinity (number) in its config', () => {
+    expect(() => {
+      new PG_Client({ client: 'pg', arrayParameterThreshold: Infinity });
+    })
+      .to.throw(TypeError)
+      .with.property('message', 'Invalid arrayParameterThreshold: Infinity');
+  });
+
+  it('the pg client refuses arrayParameterThreshold 1000 (string) in its config', () => {
+    expect(() => {
+      new PG_Client({ client: 'pg', arrayParameterThreshold: '1000' });
+    })
+      .to.throw(TypeError)
+      .with.property('message', 'Invalid arrayParameterThreshold: 1000');
+  });
 
   it('the pg client refuses arrayParameterThreshold 0 in its config', () => {
     expect(() => {

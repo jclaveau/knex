@@ -1895,6 +1895,63 @@ describe('QueryBuilder', () => {
       );
   });
 
+  it('a refused orWhereNotIn option leaves no not or or flag for the next where', () => {
+    const builder = qb().select('*').from('users').where('a', 1);
+    expect(() => {
+      builder.orWhereNotIn('b', [1], { threshold: 5 });
+    })
+      .to.throw(TypeError)
+      .with.property('message', 'Unknown whereIn option: threshold');
+    testsql(builder.where('c', 2), {
+      pg: {
+        sql: 'select * from "users" where "a" = ? and "c" = ?',
+        bindings: [1, 2],
+      },
+    });
+  });
+
+  it('a refused orHavingNotIn option leaves no not or or flag for the next having', () => {
+    const builder = qb()
+      .select('a')
+      .from('users')
+      .groupBy('a')
+      .having('a', '>', 1);
+    expect(() => {
+      builder.orHavingNotIn('a', [1], 5);
+    })
+      .to.throw(TypeError)
+      .with.property('message', 'Invalid havingIn options: 5');
+    testsql(builder.having('a', '<', 9), {
+      pg: {
+        sql: 'select "a" from "users" group by "a" having "a" > ? and "a" < ?',
+        bindings: [1, 9],
+      },
+    });
+  });
+
+  it('a refused orOnNotIn option leaves no not or or flag for the next on', () => {
+    testsql(
+      qb()
+        .select('*')
+        .from('users')
+        .join('contacts', (join) => {
+          join.on('users.id', '=', 'contacts.id');
+          expect(() => {
+            join.orOnNotIn('contacts.id', [1], { threshold: 5 });
+          })
+            .to.throw(TypeError)
+            .with.property('message', 'Unknown onIn option: threshold');
+          join.onNull('contacts.email');
+        }),
+      {
+        pg: {
+          sql: 'select * from "users" inner join "contacts" on "users"."id" = "contacts"."id" and "contacts"."email" is null',
+          bindings: [],
+        },
+      }
+    );
+  });
+
   it('where in refuses options that are not a plain object', () => {
     expect(() => {
       qb().select('*').from('users').whereIn('id', [1], 5);

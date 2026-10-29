@@ -1370,6 +1370,23 @@ describe('batchUpdate (db-less)', function () {
       });
     });
 
+    it("reads 'from_db' types under the column name postProcessResponse gives back", async function () {
+      const dialectClient = {
+        batchUpdateColumnTypesFromDb: async () => ({
+          id: 'integer',
+          firstName: 'varchar',
+        }),
+        customWrapIdentifier: (value) =>
+          ({ id: 'id', firstName: 'first_name' }[value]),
+      };
+      expect(
+        await resolveColumnTypesFromDb(dialectClient, null, 'users', [
+          'id',
+          'firstName',
+        ])
+      ).to.eql({ id: 'integer', firstName: 'varchar' });
+    });
+
     it("throws when 'from_db' finds no type for a column", async function () {
       const dialectClient = {
         batchUpdateColumnTypesFromDb: async () => ({ id: 'integer' }),

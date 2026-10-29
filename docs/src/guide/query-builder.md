@@ -2044,7 +2044,7 @@ knex('users').whereIn('id', ids1001, { arrayParameterThreshold: -1 });
 // select * from "users" where "id" in ($1, … $1001)
 ```
 
-- `-1`: never bind one array; past 65535 values PostgreSQL refuses the statement.
+- `-1`: never bind one array; past 65535 bind parameters in the statement, knex refuses it: `65536 bind parameters exceed the client's maxBindParameters 65535`.
 - `null` / `undefined`: the client config's value.
 - `0`, a value below `-1` or past the client's bind parameter cap (65535 on PostgreSQL), or anything other than an integer: a `TypeError` from the call itself, even for an empty list.
 

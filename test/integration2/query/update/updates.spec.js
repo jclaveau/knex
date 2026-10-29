@@ -1563,8 +1563,8 @@ describe('Updates', function () {
           await knex.batchUpdate(
             'members',
             [
-              { id: 1, age: knex.raw('age + 1') },
-              { id: 1, age: knex.raw('age + 1') },
+              { id: 1, age: knex.raw('?? + 1', ['age']) },
+              { id: 1, age: knex.raw('?? + 1', ['age']) },
             ],
             'id',
             { mode: 'case' }

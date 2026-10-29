@@ -1958,6 +1958,32 @@ describe('Updates', function () {
           });
         }
 
+        it("stores a Uint8Array as bytes in 'json' mode", async function () {
+          if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+            return this.skip();
+          }
+          await knex.batchUpdate(
+            'blobs',
+            [{ id: 1, label: 'a', data: new Uint8Array([120, 121]) }],
+            'id',
+            { mode: 'json' }
+          );
+
+          const rows = await knex('blobs').orderBy('id');
+          if (isCockroachDB(knex)) {
+            // CockroachDB's integer is int8, which pg returns as a string.
+            expect(rows).to.eql([
+              { id: '1', label: 'a', data: Buffer.from('xy') },
+              { id: '2', label: 'seed', data: Buffer.from('seed-2') },
+            ]);
+          } else {
+            expect(rows).to.eql([
+              { id: 1, label: 'a', data: Buffer.from('xy') },
+              { id: 2, label: 'seed', data: Buffer.from('seed-2') },
+            ]);
+          }
+        });
+
         it("updates rows keyed by a Buffer in 'json' mode", async function () {
           if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
             return this.skip();

@@ -180,6 +180,15 @@ describe('batchUpdate (db-less)', function () {
     expect(sql).to.contain('?::text as "note"');
   });
 
+  it('casts a Uint8Array to bytea in a postgres union', function () {
+    const { sql } = clients['pg']('users')
+      .batchUpdate([{ id: 1, buf: new Uint8Array([120]) }], ['id'], ['buf'])
+      .toSQL();
+    expect(sql).to.equal(
+      'update "users" set "buf" = "v"."buf" from (select ?::bigint as "id", ?::bytea as "buf") as "v" where "users"."id" = "v"."id"'
+    );
+  });
+
   it('resolves to an empty result for an empty batch', async function () {
     expect(await clients['pg'].batchUpdate('users', [])).to.eql([]);
   });
@@ -1295,6 +1304,46 @@ describe('batchUpdate (db-less)', function () {
         );
     });
 
+    it('rejects a backslash inside a quoted type name', function () {
+      expect(() =>
+        clients['pg'].batchUpdate('users', rows, 'id', {
+          columnTypes: { name: '"a\\"."b"' },
+        })
+      )
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          'Invalid columnTypes.name: "\\"a\\\\\\".\\"b\\"" is not a valid type name'
+        );
+    });
+
+    it('accepts nvarchar(max) and varchar2(n char) column types', async function () {
+      const statements = [];
+      for (const [clientName, columnTypes] of [
+        ['mssql', { id: 'int', body: 'nvarchar(max)' }],
+        ['oracledb', { id: 'number', body: 'varchar2(10 char)' }],
+      ]) {
+        const knex = knexLib({ client: clientName });
+        knex.client.acquireConnection = async () => ({ __knexUid: 'stub' });
+        knex.client.releaseConnection = async () => {};
+        knex.client._query = async (connection, query) => {
+          statements.push(query.sql);
+          return query;
+        };
+        knex.client.processResponse = () => [];
+        await knex
+          .batchUpdate('users', [{ id: 1, body: 'x' }], 'id', {
+            mode: 'json',
+            columnTypes,
+          })
+          .transacting(knex);
+      }
+      expect(statements).to.eql([
+        "update [users] set [body] = [src].[body] from openjson(@p0) with ([id] int '$.id', [body] nvarchar(max) '$.body') as [src] where [users].[id] = [src].[id];select @@rowcount",
+        'merge into "users" "tgt" using (select * from json_table(to_clob(:1), \'$[*]\' columns ("id" number path \'$.id\', "body" varchar2(10 char) path \'$.body\'))) "v" on ("tgt"."id" = "v"."id") when matched then update set "tgt"."body" = "v"."body"',
+      ]);
+    });
+
     it('rejects a type name behind more than one schema', function () {
       expect(() =>
         clients['pg'].batchUpdate('users', rows, 'id', {
@@ -1442,6 +1491,41 @@ describe('batchUpdate (db-less)', function () {
       expect(error.message).to.equal(
         `Invalid batch: column mood has type "USER-DEFINED", which is not a valid type name; pass mode 'union' with a columnTypes entry for it`
       );
+    });
+
+    it("splits a Uint8Array column out of 'json' as it does a Buffer", async function () {
+      const knex = knexLib({ client: 'pg' });
+      const statements = [];
+      knex.client.acquireConnection = async () => ({ __knexUid: 'stub' });
+      knex.client.releaseConnection = async () => {};
+      knex.client._query = async (connection, query) => {
+        statements.push([query.sql, query.bindings]);
+        return query;
+      };
+      knex.client.processResponse = () => [];
+      knex.client.batchUpdateColumnTypesFromDb = async () => ({
+        id: '"pg_catalog"."int4"',
+        name: '"pg_catalog"."text"',
+        avatar: '"pg_catalog"."bytea"',
+      });
+      await knex
+        .batchUpdate(
+          'users',
+          [{ id: 1, name: 'a', avatar: new Uint8Array([120, 121]) }],
+          'id',
+          { mode: 'json' }
+        )
+        .transacting(knex);
+      expect(statements).to.eql([
+        [
+          'update "users" set "name" = "v"."name" from jsonb_populate_recordset(null::"users", $1) as "v" where "users"."id" = "v"."id"',
+          ['[{"id":1,"name":"a"}]'],
+        ],
+        [
+          'update "users" set "avatar" = "v"."avatar" from (select $1::"pg_catalog"."int4" as "id", $2::"pg_catalog"."bytea" as "avatar") as "v" where "users"."id" = "v"."id"',
+          [1, new Uint8Array([120, 121])],
+        ],
+      ]);
     });
 
     it("skips the 'from_db' query when 'json' runs a Buffer key as 'union'", async function () {
@@ -1615,6 +1699,37 @@ describe('batchUpdate (db-less)', function () {
           'last'
         ).rows
       ).to.eql([{ token: Buffer.from('ab'), v: 'b' }]);
+    });
+
+    it('dedupes equal Uint8Array keys', function () {
+      expect(
+        prepareBatch(
+          [
+            { token: new Uint8Array([1, 2]), v: 'a' },
+            { token: new Uint8Array([1, 2]), v: 'b' },
+          ],
+          ['token'],
+          'last'
+        ).rows
+      ).to.eql([{ token: new Uint8Array([1, 2]), v: 'b' }]);
+    });
+
+    it('refuses a non-finite number in a composite key', function () {
+      expect(() =>
+        prepareBatch(
+          [
+            { score: Infinity, tag: 'a', v: 'x' },
+            { score: NaN, tag: 'a', v: 'y' },
+          ],
+          ['score', 'tag'],
+          'last'
+        )
+      )
+        .to.throw(TypeError)
+        .with.property(
+          'message',
+          "Invalid batch: a key holds Infinity, which a composite, array or object key can't compare"
+        );
     });
 
     it('throws on a duplicate key when requested', function () {

@@ -1962,6 +1962,26 @@ describe('QueryBuilder', () => {
       .with.property('message', 'Invalid arrayParameterThreshold: 1.5');
   });
 
+  it('on not in with an empty list matches every row and leaves no not flag', () => {
+    testsql(
+      qb()
+        .select('*')
+        .from('users')
+        .join('contacts', (join) => {
+          join
+            .on('users.id', '=', 'contacts.id')
+            .onNotIn('contacts.id', [])
+            .onNull('contacts.email');
+        }),
+      {
+        pg: {
+          sql: 'select * from "users" inner join "contacts" on "users"."id" = "contacts"."id" and 1 = 1 and "contacts"."email" is null',
+          bindings: [],
+        },
+      }
+    );
+  });
+
   it('a refused orWhereNotIn option leaves no not or or flag for the next where', () => {
     const builder = qb().select('*').from('users').where('a', 1);
     expect(() => {

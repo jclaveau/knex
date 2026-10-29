@@ -2028,7 +2028,7 @@ knex
 ```
 
 ::: info PostgreSQL
-PostgreSQL caps a statement at 65535 bind parameters. A list longer than `arrayParameterThreshold` (default 1000) binds as one array parameter instead of one parameter per value. The client config sets the default (see [Configuration Options](/guide/#configuration-options)); `options.arrayParameterThreshold` overrides it per call. CockroachDB inherits it; other dialects ignore it.
+PostgreSQL caps a statement at 65535 bind parameters. A list longer than `arrayParameterThreshold` (default 1000) binds as one array parameter instead of one parameter per value. The client config sets the default (see [Configuration Options](/guide/#configuration-options)); `options.arrayParameterThreshold` overrides it per call. CockroachDB inherits it; other dialects keep `in (…)`, but refuse an invalid value the same way.
 
 ```js
 knex('users').whereIn('id', [1, 2, 3]);

@@ -1916,6 +1916,52 @@ describe('QueryBuilder', () => {
       .with.property('message', 'Invalid whereIn options: Symbol(x)');
   });
 
+  it('the mysql compiler refuses arrayParameterThreshold 0 in a where in', () => {
+    expect(() => {
+      new MySQL_Client({ client: 'mysql' })
+        .queryBuilder()
+        .from('users')
+        .whereIn('id', [1], { arrayParameterThreshold: 0 })
+        .toSQL();
+    })
+      .to.throw(TypeError)
+      .with.property(
+        'message',
+        'arrayParameterThreshold 0: pass 1 to use one array parameter for any list of 2 or more, -1 to never'
+      );
+  });
+
+  it('the sqlite compiler refuses a having in arrayParameterThreshold past its maxBindParameters', () => {
+    expect(() => {
+      new SQLite3_Client({ client: 'sqlite3', useNullAsDefault: true })
+        .queryBuilder()
+        .select('id')
+        .from('users')
+        .groupBy('id')
+        .havingIn('id', [1], { arrayParameterThreshold: 40000 })
+        .toSQL();
+    })
+      .to.throw(TypeError)
+      .with.property(
+        'message',
+        "arrayParameterThreshold 40000 exceeds the client's maxBindParameters 32766"
+      );
+  });
+
+  it('the redshift compiler refuses an invalid on in arrayParameterThreshold', () => {
+    expect(() => {
+      new Redshift_Client({ client: 'redshift' })
+        .queryBuilder()
+        .from('users')
+        .join('contacts', (join) => {
+          join.onIn('contacts.id', [1], { arrayParameterThreshold: 1.5 });
+        })
+        .toSQL();
+    })
+      .to.throw(TypeError)
+      .with.property('message', 'Invalid arrayParameterThreshold: 1.5');
+  });
+
   it('a refused orWhereNotIn option leaves no not or or flag for the next where', () => {
     const builder = qb().select('*').from('users').where('a', 1);
     expect(() => {

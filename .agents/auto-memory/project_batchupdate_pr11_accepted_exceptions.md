@@ -29,7 +29,7 @@ PR #11 replaces #2 (closed with pointer comment, jean: "so we stop messing with 
 
 - Autoreview round 2 (2026-10-29): fixed e487fe11 (null uncast before a raw), f7aa0130 ('from_db' under postProcessResponse names), f4b004a2 (bench chunk counts, docs). Rulings, done in bf3e280c: #1 A Uint8Array = binary (`ArrayBuffer.isView`); #4 A Infinity/NaN in composite/array/object key → refused; #8 go `(max)`, `(n char|byte)`; #11 A `\` refused in quoted type. #5 ruled: new `onDuplicateKey: 'each'`, the DEFAULT (jean named it, over "rounds"/"every"): round k = k-th row of each key, rounds run in order in one txn → per-row result (raw `age + 1` twice adds 2, an undefined column keeps the earlier write, returning concatenated); `'last'`/`'throw'` kept. Internal word: `duplicateRounds`. Do not re-propose merge-per-column. #12 ruled A over the whole file: the PR's batchUpdate integration tests assert raw rows, an `if (isCockroachDB)` / `if (isPgBased)` (count) picks the literal; upstream `assertNumber` tests near l.200 left alone.
 
-**OLD OPEN**: tuning the SQLite composite-case cap from the small-cap bench sweep (keys × columns grid, CPU median) — in progress at handoff; check `git log` for the final value.
+SQLite `'case'` cap settled: `floor(50 / columns)` rows (at least 1), pinned in f4444ddf.
 
 Per-DBMS out-of-scope issues on the fork: #5 MySQL/MariaDB, #6 MSSQL, #7 Oracle, #8 SQLite, #9 CI bench/type tests. Related: [[project_batchupdate_modes]], [[project_hhh_dev_default_branch]].
 

@@ -758,14 +758,14 @@ declare namespace Knex {
     havingRaw: RawQueryBuilder<TRecord, TResult>;
     orHaving: Having<TRecord, TResult>;
     orHavingRaw: RawQueryBuilder<TRecord, TResult>;
-    havingIn: HavingRange<TRecord, TResult>;
+    havingIn: HavingIn<TRecord, TResult>;
     orHavingNotBetween: HavingRange<TRecord, TResult>;
     havingNotBetween: HavingRange<TRecord, TResult>;
     orHavingBetween: HavingRange<TRecord, TResult>;
     havingBetween: HavingRange<TRecord, TResult>;
-    havingNotIn: HavingRange<TRecord, TResult>;
-    andHavingNotIn: HavingRange<TRecord, TResult>;
-    orHavingNotIn: HavingRange<TRecord, TResult>;
+    havingNotIn: HavingIn<TRecord, TResult>;
+    andHavingNotIn: HavingIn<TRecord, TResult>;
+    orHavingNotIn: HavingIn<TRecord, TResult>;
     havingNull: HavingNull<TRecord, TResult>;
     havingNotNull: HavingNull<TRecord, TResult>;
     orHavingNull: HavingNull<TRecord, TResult>;
@@ -1622,12 +1622,36 @@ declare namespace Knex {
     andOnVal(column1: string, operator: string, value: Value): JoinClause;
     orOnVal(column1: string, value: Value): JoinClause;
     orOnVal(column1: string, operator: string, value: Value): JoinClause;
-    onIn(column1: string, values: readonly any[] | Raw): JoinClause;
-    andOnIn(column1: string, values: readonly any[] | Raw): JoinClause;
-    orOnIn(column1: string, values: readonly any[] | Raw): JoinClause;
-    onNotIn(column1: string, values: readonly any[] | Raw): JoinClause;
-    andOnNotIn(column1: string, values: readonly any[] | Raw): JoinClause;
-    orOnNotIn(column1: string, values: readonly any[] | Raw): JoinClause;
+    onIn(
+      column1: string,
+      values: readonly any[] | Raw,
+      options?: InListOptions
+    ): JoinClause;
+    andOnIn(
+      column1: string,
+      values: readonly any[] | Raw,
+      options?: InListOptions
+    ): JoinClause;
+    orOnIn(
+      column1: string,
+      values: readonly any[] | Raw,
+      options?: InListOptions
+    ): JoinClause;
+    onNotIn(
+      column1: string,
+      values: readonly any[] | Raw,
+      options?: InListOptions
+    ): JoinClause;
+    andOnNotIn(
+      column1: string,
+      values: readonly any[] | Raw,
+      options?: InListOptions
+    ): JoinClause;
+    orOnNotIn(
+      column1: string,
+      values: readonly any[] | Raw,
+      options?: InListOptions
+    ): JoinClause;
     onNull(column1: string): JoinClause;
     andOnNull(column1: string): JoinClause;
     orOnNull(column1: string): JoinClause;
@@ -1833,40 +1857,57 @@ declare namespace Knex {
     ): QueryBuilder<TRecord, TResult>;
   }
 
+  interface InListOptions {
+    /**
+     * The longest list compiled as `in (?, …)`; a longer one is one array
+     * parameter (`= any($1)` / `<> all($1)`). -1 → never; null/undefined → the
+     * client's `arrayParameterThreshold`. PostgreSQL and CockroachDB only.
+     */
+    arrayParameterThreshold?: number | null;
+  }
+
   interface WhereIn<TRecord extends {} = any, TResult = unknown[]> {
     <K extends keyof ResolveTableType<TRecord>>(
       columnName: K,
-      values: readonly DbColumn<ResolveTableType<TRecord>[K]>[] | QueryCallback
+      values: readonly DbColumn<ResolveTableType<TRecord>[K]>[] | QueryCallback,
+      options?: InListOptions
     ): QueryBuilder<TRecord, TResult>;
     (
       columnName: string,
-      values: readonly Value[] | QueryCallback
+      values: readonly Value[] | QueryCallback,
+      options?: InListOptions
     ): QueryBuilder<TRecord, TResult>;
     <K extends keyof ResolveTableType<TRecord>>(
       columnNames: readonly K[],
       values:
         | readonly (readonly DbColumn<ResolveTableType<TRecord>[K]>[])[]
-        | QueryCallback
+        | QueryCallback,
+      options?: InListOptions
     ): QueryBuilder<TRecord, TResult>;
     (
       columnNames: readonly string[],
-      values: readonly Value[][] | QueryCallback
+      values: readonly Value[][] | QueryCallback,
+      options?: InListOptions
     ): QueryBuilder<TRecord, TResult>;
     <K extends keyof TRecord, TRecordInner extends {}, TResultInner>(
       columnName: K,
-      values: QueryBuilder<TRecordInner, TRecord[K]>
+      values: QueryBuilder<TRecordInner, TRecord[K]>,
+      options?: InListOptions
     ): QueryBuilder<TRecord, TResult>;
     <TRecordInner extends {}, TResultInner>(
       columnName: string,
-      values: Value[] | QueryBuilder<TRecordInner, TResultInner>
+      values: Value[] | QueryBuilder<TRecordInner, TResultInner>,
+      options?: InListOptions
     ): QueryBuilder<TRecord, TResult>;
     <K extends keyof TRecord, TRecordInner extends {}, TResultInner>(
       columnNames: readonly K[],
-      values: QueryBuilder<TRecordInner, TRecord[K]>
+      values: QueryBuilder<TRecordInner, TRecord[K]>,
+      options?: InListOptions
     ): QueryBuilder<TRecord, TResult>;
     <TRecordInner extends {}, TResultInner>(
       columnNames: readonly string[],
-      values: QueryBuilder<TRecordInner, TResultInner>
+      values: QueryBuilder<TRecordInner, TResultInner>,
+      options?: InListOptions
     ): QueryBuilder<TRecord, TResult>;
   }
 
@@ -2058,6 +2099,19 @@ declare namespace Knex {
     ): QueryBuilder<TRecord, TResult>;
 
     (raw: Raw): QueryBuilder<TRecord, TResult>;
+  }
+
+  interface HavingIn<TRecord extends {} = any, TResult = unknown[]> {
+    <K extends keyof TRecord>(
+      columnName: K,
+      values: readonly DbColumn<TRecord[K]>[],
+      options?: InListOptions
+    ): QueryBuilder<TRecord, TResult>;
+    (
+      columnName: string,
+      values: readonly Value[],
+      options?: InListOptions
+    ): QueryBuilder<TRecord, TResult>;
   }
 
   interface HavingRange<TRecord extends {} = any, TResult = unknown[]> {
@@ -2852,6 +2906,12 @@ declare namespace Knex {
     acquireConnectionTimeout?: number;
     useNullAsDefault?: boolean;
     searchPath?: string | readonly string[];
+    /**
+     * The longest `whereIn`/`havingIn`/`onIn` list compiled as `in (?, …)`; a
+     * longer one is one array parameter (`= any($1)` / `<> all($1)`). -1 →
+     * never. Defaults to 1000. PostgreSQL and CockroachDB only.
+     */
+    arrayParameterThreshold?: number | null;
     asyncStackTraces?: boolean;
     log?: Logger;
     compileSqlOnError?: boolean;

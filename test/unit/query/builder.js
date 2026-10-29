@@ -1553,14 +1553,380 @@ describe('QueryBuilder', () => {
     });
   });
 
-  it('where in at the postgres bind parameter limit keeps its list', () => {
-    const ids = Array.from({ length: 65535 }, (_, index) => index + 1);
+  it('where in at the default array parameter threshold keeps its list', () => {
+    const ids = Array.from({ length: 1000 }, (_, index) => index + 1);
     testsql(qb().select('*').from('users').whereIn('id', ids), {
       pg: {
-        sql: `select * from "users" where "id" in (${'?, '.repeat(65534)}?)`,
+        sql: `select * from "users" where "id" in (${'?, '.repeat(999)}?)`,
+        bindings: ids,
+      },
+      cockroachdb: {
+        sql: `select * from "users" where "id" in (${'?, '.repeat(999)}?)`,
         bindings: ids,
       },
     });
+  });
+
+  it('where in past the default array parameter threshold binds one array', () => {
+    const ids = Array.from({ length: 1001 }, (_, index) => index + 1);
+    testsql(qb().select('*').from('users').whereIn('id', ids), {
+      pg: {
+        sql: 'select * from "users" where "id" = any(?)',
+        bindings: [ids],
+      },
+      cockroachdb: {
+        sql: 'select * from "users" where "id" = any(?)',
+        bindings: [ids],
+      },
+      'pg-redshift': {
+        sql: `select * from "users" where "id" in (${'?, '.repeat(1000)}?)`,
+        bindings: ids,
+      },
+      mysql: {
+        sql: `select * from \`users\` where \`id\` in (${'?, '.repeat(1000)}?)`,
+        bindings: ids,
+      },
+    });
+  });
+
+  it('where not in past the default array parameter threshold binds one array', () => {
+    const ids = Array.from({ length: 1001 }, (_, index) => index + 1);
+    testsql(qb().select('*').from('users').whereNotIn('id', ids), {
+      pg: {
+        sql: 'select * from "users" where "id" <> all(?)',
+        bindings: [ids],
+      },
+    });
+  });
+
+  it('where in with arrayParameterThreshold -1 keeps its list', () => {
+    const ids = Array.from({ length: 1001 }, (_, index) => index + 1);
+    testsql(
+      qb()
+        .select('*')
+        .from('users')
+        .whereIn('id', ids, { arrayParameterThreshold: -1 }),
+      {
+        pg: {
+          sql: `select * from "users" where "id" in (${'?, '.repeat(1000)}?)`,
+          bindings: ids,
+        },
+        cockroachdb: {
+          sql: `select * from "users" where "id" in (${'?, '.repeat(1000)}?)`,
+          bindings: ids,
+        },
+      }
+    );
+  });
+
+  it('where in with arrayParameterThreshold 1 keeps a single value', () => {
+    testsql(
+      qb()
+        .select('*')
+        .from('users')
+        .whereIn('id', [1], { arrayParameterThreshold: 1 }),
+      {
+        pg: {
+          sql: 'select * from "users" where "id" in (?)',
+          bindings: [1],
+        },
+      }
+    );
+  });
+
+  it('where in with arrayParameterThreshold 1 binds two values as one array', () => {
+    testsql(
+      qb()
+        .select('*')
+        .from('users')
+        .whereIn('id', [1, 2], { arrayParameterThreshold: 1 }),
+      {
+        pg: {
+          sql: 'select * from "users" where "id" = any(?)',
+          bindings: [[1, 2]],
+        },
+      }
+    );
+  });
+
+  it('where in at arrayParameterThreshold 5000 keeps its list', () => {
+    const ids = Array.from({ length: 5000 }, (_, index) => index + 1);
+    testsql(
+      qb()
+        .select('*')
+        .from('users')
+        .whereIn('id', ids, { arrayParameterThreshold: 5000 }),
+      {
+        pg: {
+          sql: `select * from "users" where "id" in (${'?, '.repeat(4999)}?)`,
+          bindings: ids,
+        },
+      }
+    );
+  });
+
+  it('where in past arrayParameterThreshold 5000 binds one array', () => {
+    const ids = Array.from({ length: 5001 }, (_, index) => index + 1);
+    testsql(
+      qb()
+        .select('*')
+        .from('users')
+        .whereIn('id', ids, { arrayParameterThreshold: 5000 }),
+      {
+        pg: {
+          sql: 'select * from "users" where "id" = any(?)',
+          bindings: [ids],
+        },
+      }
+    );
+  });
+
+  it('where in takes arrayParameterThreshold from the client config', () => {
+    testsql(
+      qb().select('*').from('users').whereIn('id', [1, 2, 3]),
+      {
+        pg: {
+          sql: 'select * from "users" where "id" = any(?)',
+          bindings: [[1, 2, 3]],
+        },
+        cockroachdb: {
+          sql: 'select * from "users" where "id" = any(?)',
+          bindings: [[1, 2, 3]],
+        },
+      },
+      {
+        pg: new PG_Client({ client: 'pg', arrayParameterThreshold: 2 }),
+        cockroachdb: new CockroachDB_Client({
+          client: 'cockroachdb',
+          arrayParameterThreshold: 2,
+        }),
+      }
+    );
+  });
+
+  it('where in with arrayParameterThreshold null or undefined falls back to the client config', () => {
+    testsql(
+      qb()
+        .select('*')
+        .from('users')
+        .whereIn('id', [1, 2, 3], { arrayParameterThreshold: null })
+        .orWhereIn('id', [4, 5, 6], { arrayParameterThreshold: undefined }),
+      {
+        pg: {
+          sql: 'select * from "users" where "id" = any(?) or "id" = any(?)',
+          bindings: [
+            [1, 2, 3],
+            [4, 5, 6],
+          ],
+        },
+      },
+      { pg: new PG_Client({ client: 'pg', arrayParameterThreshold: 2 }) }
+    );
+  });
+
+  it('where in arrayParameterThreshold wins over the client config', () => {
+    testsql(
+      qb()
+        .select('*')
+        .from('users')
+        .whereIn('id', [1, 2, 3], { arrayParameterThreshold: -1 }),
+      {
+        pg: {
+          sql: 'select * from "users" where "id" in (?, ?, ?)',
+          bindings: [1, 2, 3],
+        },
+      },
+      { pg: new PG_Client({ client: 'pg', arrayParameterThreshold: 2 }) }
+    );
+  });
+
+  it('having in and on in take arrayParameterThreshold', () => {
+    testsql(
+      qb()
+        .select('users.id')
+        .from('users')
+        .join('contacts', (join) => {
+          join.onIn('contacts.id', [1, 2], { arrayParameterThreshold: 1 });
+        })
+        .groupBy('users.id')
+        .havingNotIn('users.id', [3, 4], { arrayParameterThreshold: 1 }),
+      {
+        pg: {
+          sql: 'select "users"."id" from "users" inner join "contacts" on "contacts"."id" = any(?) group by "users"."id" having "users"."id" <> all(?)',
+          bindings: [
+            [1, 2],
+            [3, 4],
+          ],
+        },
+      }
+    );
+  });
+
+  it('every or, not and and in variant passes arrayParameterThreshold on', () => {
+    testsql(
+      qb()
+        .select('users.id')
+        .from('users')
+        .join('contacts', (join) => {
+          join
+            .onIn('contacts.id', [1, 2], { arrayParameterThreshold: 1 })
+            .andOnIn('contacts.id', [3, 4], { arrayParameterThreshold: 1 })
+            .orOnIn('contacts.id', [5, 6], { arrayParameterThreshold: 1 })
+            .onNotIn('contacts.id', [7, 8], { arrayParameterThreshold: 1 })
+            .orOnNotIn('contacts.id', [9, 10], { arrayParameterThreshold: 1 });
+        })
+        .whereIn('users.id', [11, 12], { arrayParameterThreshold: 1 })
+        .orWhereIn('users.id', [13, 14], { arrayParameterThreshold: 1 })
+        .whereNotIn('users.id', [15, 16], { arrayParameterThreshold: 1 })
+        .orWhereNotIn('users.id', [17, 18], { arrayParameterThreshold: 1 })
+        .groupBy('users.id')
+        .havingIn('users.id', [19, 20], { arrayParameterThreshold: 1 })
+        .andHavingIn('users.id', [21, 22], { arrayParameterThreshold: 1 })
+        .orHavingIn('users.id', [23, 24], { arrayParameterThreshold: 1 })
+        .havingNotIn('users.id', [25, 26], { arrayParameterThreshold: 1 })
+        .andHavingNotIn('users.id', [27, 28], { arrayParameterThreshold: 1 })
+        .orHavingNotIn('users.id', [29, 30], { arrayParameterThreshold: 1 }),
+      {
+        pg: {
+          sql: 'select "users"."id" from "users" inner join "contacts" on "contacts"."id" = any(?) and "contacts"."id" = any(?) or "contacts"."id" = any(?) and "contacts"."id" <> all(?) or "contacts"."id" <> all(?) where "users"."id" = any(?) or "users"."id" = any(?) and "users"."id" <> all(?) or "users"."id" <> all(?) group by "users"."id" having "users"."id" = any(?) and "users"."id" = any(?) or "users"."id" = any(?) and "users"."id" <> all(?) and "users"."id" <> all(?) or "users"."id" <> all(?)',
+          bindings: [
+            [1, 2],
+            [3, 4],
+            [5, 6],
+            [7, 8],
+            [9, 10],
+            [11, 12],
+            [13, 14],
+            [15, 16],
+            [17, 18],
+            [19, 20],
+            [21, 22],
+            [23, 24],
+            [25, 26],
+            [27, 28],
+            [29, 30],
+          ],
+        },
+      }
+    );
+  });
+
+  it('where in refuses arrayParameterThreshold 0', () => {
+    expect(() => {
+      qb()
+        .select('*')
+        .from('users')
+        .whereIn('id', [1], { arrayParameterThreshold: 0 })
+        .toSQL();
+    })
+      .to.throw(TypeError)
+      .with.property(
+        'message',
+        'arrayParameterThreshold 0: pass 1 to always use one array parameter, -1 to never'
+      );
+  });
+
+  it('where in refuses an arrayParameterThreshold past maxBindParameters', () => {
+    expect(() => {
+      qb()
+        .select('*')
+        .from('users')
+        .whereIn('id', [1], { arrayParameterThreshold: 70000 })
+        .toSQL();
+    })
+      .to.throw(TypeError)
+      .with.property(
+        'message',
+        "arrayParameterThreshold 70000 exceeds the client's maxBindParameters 65535"
+      );
+  });
+
+  for (const [arrayParameterThreshold, message] of [
+    [-2, 'Invalid arrayParameterThreshold: -2'],
+    [1.5, 'Invalid arrayParameterThreshold: 1.5'],
+    [NaN, 'Invalid arrayParameterThreshold: NaN'],
+    [Infinity, 'Invalid arrayParameterThreshold: Infinity'],
+    ['1000', 'Invalid arrayParameterThreshold: 1000'],
+  ]) {
+    it(`where in refuses arrayParameterThreshold ${String(
+      arrayParameterThreshold
+    )} (${typeof arrayParameterThreshold})`, () => {
+      expect(() => {
+        qb()
+          .select('*')
+          .from('users')
+          .whereIn('id', [1], { arrayParameterThreshold })
+          .toSQL();
+      })
+        .to.throw(TypeError)
+        .with.property('message', message);
+    });
+
+    it(`the pg client refuses arrayParameterThreshold ${String(
+      arrayParameterThreshold
+    )} (${typeof arrayParameterThreshold}) in its config`, () => {
+      expect(() => {
+        new PG_Client({ client: 'pg', arrayParameterThreshold });
+      })
+        .to.throw(TypeError)
+        .with.property('message', message);
+    });
+  }
+
+  it('the pg client refuses arrayParameterThreshold 0 in its config', () => {
+    expect(() => {
+      new PG_Client({ client: 'pg', arrayParameterThreshold: 0 });
+    })
+      .to.throw(TypeError)
+      .with.property(
+        'message',
+        'arrayParameterThreshold 0: pass 1 to always use one array parameter, -1 to never'
+      );
+  });
+
+  it('the pg client refuses an arrayParameterThreshold past maxBindParameters in its config', () => {
+    expect(() => {
+      new PG_Client({ client: 'pg', arrayParameterThreshold: 70000 });
+    })
+      .to.throw(TypeError)
+      .with.property(
+        'message',
+        "arrayParameterThreshold 70000 exceeds the client's maxBindParameters 65535"
+      );
+  });
+
+  it('where in refuses options that are not a plain object', () => {
+    expect(() => {
+      qb().select('*').from('users').whereIn('id', [1], 5);
+    })
+      .to.throw(TypeError)
+      .with.property('message', 'Invalid whereIn options: 5');
+  });
+
+  it('where in refuses an unknown option', () => {
+    expect(() => {
+      qb().select('*').from('users').whereIn('id', [1], { threshold: 5 });
+    })
+      .to.throw(TypeError)
+      .with.property('message', 'Unknown whereIn option: threshold');
+  });
+
+  it('having in and on in refuse an unknown option', () => {
+    expect(() => {
+      qb().select('*').from('users').havingIn('id', [1], { threshold: 5 });
+    })
+      .to.throw(TypeError)
+      .with.property('message', 'Unknown havingIn option: threshold');
+    expect(() => {
+      qb()
+        .select('*')
+        .from('users')
+        .join('contacts', (join) => {
+          join.onIn('contacts.id', [1], { threshold: 5 });
+        });
+    })
+      .to.throw(TypeError)
+      .with.property('message', 'Unknown onIn option: threshold');
   });
 
   it('where in past the postgres bind parameter limit holding a raw keeps its list', () => {

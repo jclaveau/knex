@@ -1979,7 +1979,7 @@ knex('accounts').where('id', 'not in', subquery);
 
 ### whereIn
 
-**.whereIn(column|columns, array|callback|builder)**
+**.whereIn(column|columns, array|callback|builder, [options])**
 **.orWhereIn**
 
 Shorthand for .where('id', 'in', obj), the .whereIn and .orWhereIn methods add a "where in" clause to the query. Note that passing empty array as the value results in a query that never returns any rows (`WHERE 1 = 0`)
@@ -2027,9 +2027,35 @@ knex
   );
 ```
 
+::: info PostgreSQL
+PostgreSQL caps a statement at 65535 bind parameters. A list longer than `arrayParameterThreshold` (default 1000) binds as one array parameter instead of one parameter per value. The client config sets the default (see [Configuration Options](/guide/#configuration-options)); `options.arrayParameterThreshold` overrides it per call. CockroachDB inherits it; other dialects ignore it.
+
+```js
+knex('users').whereIn('id', [1, 2, 3]);
+// select * from "users" where "id" in ($1, $2, $3)
+
+knex('users').whereIn('id', ids1001);
+// select * from "users" where "id" = any($1)
+
+knex('users').whereNotIn('id', ids1001);
+// select * from "users" where "id" <> all($1)
+
+knex('users').whereIn('id', ids1001, { arrayParameterThreshold: -1 });
+// select * from "users" where "id" in ($1, … $1001)
+```
+
+- `-1`: never bind one array; past 65535 values PostgreSQL refuses the statement.
+- `null` / `undefined`: the client config's value.
+- `0`, a value past 65535, or anything other than an integer: a `TypeError`.
+
+Use `-1` for a column whose type has no array type: the array parameter's type comes from the column.
+
+Lists of tuples, subqueries, callbacks, and lists holding a raw or an object keep the `in (…)` form.
+:::
+
 ### whereNotIn
 
-**.whereNotIn(column, array|callback|builder)**
+**.whereNotIn(column, array|callback|builder, [options])**
 **.orWhereNotIn**
 
 ```js
@@ -2481,9 +2507,9 @@ knex
 
 ### onIn
 
-**.onIn(column, values)**
+**.onIn(column, values, [options])**
 
-Adds a onIn clause to the query.
+Adds a onIn clause to the query. `options` is the one of [whereIn](#wherein).
 
 ```js
 // @sql
@@ -2865,9 +2891,9 @@ knex('users')
 
 ### havingIn
 
-**.havingIn(column, values)**
+**.havingIn(column, values, [options])**
 
-Adds a havingIn clause to the query.
+Adds a havingIn clause to the query. `options` is the one of [whereIn](#wherein).
 
 ```js
 // @sql
@@ -2876,7 +2902,7 @@ knex.select('*').from('users').havingIn('id', [5, 3, 10, 17]);
 
 ### havingNotIn
 
-**.havingNotIn(column, values)**
+**.havingNotIn(column, values, [options])**
 
 Adds a havingNotIn clause to the query.
 

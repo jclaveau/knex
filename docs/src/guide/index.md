@@ -62,6 +62,19 @@ const pg = require('knex')({
 
 :::
 
+::: info PostgreSQL
+`arrayParameterThreshold` (default 1000) is the longest `whereIn` / `havingIn` / `onIn` list compiled as `in (?, …)`; a longer one binds as one array parameter (`= any($1)`). `-1` never binds one array. See [whereIn](/guide/query-builder#wherein).
+
+```js
+const pg = require('knex')({
+  client: 'pg',
+  connection: process.env.PG_CONNECTION_STRING,
+  arrayParameterThreshold: 5000,
+});
+```
+
+:::
+
 When using the PostgreSQL driver, another usage pattern for instantiating the Knex configuration object could be to use a `connection: {}` object details to specify various flags such as enabling SSL, a connection string, and individual connection configuration fields all in the same object. Consider the following example:
 
 ::: info PostgreSQL

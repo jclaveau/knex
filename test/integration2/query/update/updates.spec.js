@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const { TEST_TIMESTAMP } = require('../../../util/constants');
 const {
   isPostgreSQL,
+  isPgBased,
   isMysql,
   isMariaDB,
   isMssql,
@@ -773,14 +774,20 @@ describe('Updates', function () {
           ]);
 
           const rows = await knex('members').orderBy('id');
-          // Number() coerces CockroachDB's int-as-string columns.
-          expect(rows.map((r) => [Number(r.id), r.name, Number(r.age)])).to.eql(
-            [
-              [1, 'new1', 11],
-              [2, 'new2', 22],
-              [3, 'decoy', 99], // outside the batch — must be unchanged
-            ]
-          );
+          if (isCockroachDB(knex)) {
+            // CockroachDB's integer is int8, which pg returns as a string.
+            expect(rows).to.eql([
+              { id: '1', name: 'new1', age: '11' },
+              { id: '2', name: 'new2', age: '22' },
+              { id: '3', name: 'decoy', age: '99' }, // outside the batch — must be unchanged
+            ]);
+          } else {
+            expect(rows).to.eql([
+              { id: 1, name: 'new1', age: 11 },
+              { id: 2, name: 'new2', age: 22 },
+              { id: 3, name: 'decoy', age: 99 }, // outside the batch — must be unchanged
+            ]);
+          }
         });
 
         it("updates each row to its own values with mode: 'case'", async function () {
@@ -795,13 +802,20 @@ describe('Updates', function () {
           );
 
           const rows = await knex('members').orderBy('id');
-          expect(rows.map((r) => [Number(r.id), r.name, Number(r.age)])).to.eql(
-            [
-              [1, 'new1', 11],
-              [2, 'new2', 22],
-              [3, 'decoy', 99], // outside the batch — must be unchanged
-            ]
-          );
+          if (isCockroachDB(knex)) {
+            // CockroachDB's integer is int8, which pg returns as a string.
+            expect(rows).to.eql([
+              { id: '1', name: 'new1', age: '11' },
+              { id: '2', name: 'new2', age: '22' },
+              { id: '3', name: 'decoy', age: '99' }, // outside the batch — must be unchanged
+            ]);
+          } else {
+            expect(rows).to.eql([
+              { id: 1, name: 'new1', age: 11 },
+              { id: 2, name: 'new2', age: 22 },
+              { id: 3, name: 'decoy', age: 99 }, // outside the batch — must be unchanged
+            ]);
+          }
         });
 
         it("updates each row to its own values with mode: 'json'", async function () {
@@ -839,13 +853,20 @@ describe('Updates', function () {
           );
 
           const rows = await knex('members').orderBy('id');
-          expect(rows.map((r) => [Number(r.id), r.name, Number(r.age)])).to.eql(
-            [
-              [1, 'new1', 11],
-              [2, 'new2', 22],
-              [3, 'decoy', 99], // outside the batch — must be unchanged
-            ]
-          );
+          if (isCockroachDB(knex)) {
+            // CockroachDB's integer is int8, which pg returns as a string.
+            expect(rows).to.eql([
+              { id: '1', name: 'new1', age: '11' },
+              { id: '2', name: 'new2', age: '22' },
+              { id: '3', name: 'decoy', age: '99' }, // outside the batch — must be unchanged
+            ]);
+          } else {
+            expect(rows).to.eql([
+              { id: 1, name: 'new1', age: 11 },
+              { id: 2, name: 'new2', age: 22 },
+              { id: 3, name: 'decoy', age: 99 }, // outside the batch — must be unchanged
+            ]);
+          }
         });
 
         it("resolves columnTypes from the schema with 'from_db'", async function () {
@@ -866,13 +887,11 @@ describe('Updates', function () {
           );
 
           const rows = await knex('members').orderBy('id');
-          expect(rows.map((r) => [Number(r.id), r.name, Number(r.age)])).to.eql(
-            [
-              [1, 'fromdb1', 11],
-              [2, 'fromdb2', 22],
-              [3, 'decoy', 99],
-            ]
-          );
+          expect(rows).to.eql([
+            { id: 1, name: 'fromdb1', age: 11 },
+            { id: 2, name: 'fromdb2', age: 22 },
+            { id: 3, name: 'decoy', age: 99 },
+          ]);
         });
 
         it("types uuid, enum and text[] columns from the table row type in 'json' mode", async function () {
@@ -1014,11 +1033,18 @@ describe('Updates', function () {
 
           const rows = await knex('batch_moods.moods').orderBy('id');
           await knex.raw('drop schema batch_moods cascade');
-          // Number() coerces CockroachDB's int-as-string columns.
-          expect(rows.map((r) => [Number(r.id), r.level])).to.eql([
-            [1, 'high'],
-            [2, 'low'],
-          ]);
+          if (isCockroachDB(knex)) {
+            // CockroachDB's integer is int8, which pg returns as a string.
+            expect(rows).to.eql([
+              { id: '1', level: 'high' },
+              { id: '2', level: 'low' },
+            ]);
+          } else {
+            expect(rows).to.eql([
+              { id: 1, level: 'high' },
+              { id: 2, level: 'low' },
+            ]);
+          }
         });
 
         it("casts enum and text[] columns resolved with 'from_db' in 'union' mode", async function () {
@@ -1046,11 +1072,18 @@ describe('Updates', function () {
           const rows = await knex('moods').orderBy('id');
           await knex.schema.dropTableIfExists('moods');
           await knex.raw('drop type if exists mood_level');
-          // Number() coerces CockroachDB's int-as-string columns.
-          expect(rows.map((r) => [Number(r.id), r.level, r.tags])).to.eql([
-            [1, 'high', ['x', 'y']],
-            [2, 'low', ['decoy']],
-          ]);
+          if (isCockroachDB(knex)) {
+            // CockroachDB's integer is int8, which pg returns as a string.
+            expect(rows).to.eql([
+              { id: '1', level: 'high', tags: ['x', 'y'] },
+              { id: '2', level: 'low', tags: ['decoy'] },
+            ]);
+          } else {
+            expect(rows).to.eql([
+              { id: 1, level: 'high', tags: ['x', 'y'] },
+              { id: 2, level: 'low', tags: ['decoy'] },
+            ]);
+          }
         });
 
         it("writes varchar and char columns resolved with 'from_db' in full", async function () {
@@ -1324,11 +1357,20 @@ describe('Updates', function () {
           );
 
           const rows = await knex('members').orderBy('id');
-          expect(rows.map((r) => [Number(r.id), Number(r.age)])).to.eql([
-            [1, 42],
-            [2, 8],
-            [3, 99],
-          ]);
+          if (isCockroachDB(knex)) {
+            // CockroachDB's integer is int8, which pg returns as a string.
+            expect(rows).to.eql([
+              { id: '1', name: 'old1', age: '42' },
+              { id: '2', name: 'old2', age: '8' },
+              { id: '3', name: 'decoy', age: '99' },
+            ]);
+          } else {
+            expect(rows).to.eql([
+              { id: 1, name: 'old1', age: 42 },
+              { id: 2, name: 'old2', age: 8 },
+              { id: 3, name: 'decoy', age: 99 },
+            ]);
+          }
         });
 
         it('returns the requested columns on postgres-family dialects', async function () {
@@ -1338,10 +1380,12 @@ describe('Updates', function () {
           const result = await knex
             .batchUpdate('members', [{ id: 1, name: 'ret', age: 5 }])
             .returning(['id', 'name']);
-          expect(result.length).to.equal(1);
-          expect(result[0].name).to.equal('ret');
-          // CockroachDB returns INT columns as strings
-          assertNumber(knex, result[0].id, 1);
+          if (isCockroachDB(knex)) {
+            // CockroachDB's integer is int8, which pg returns as a string.
+            expect(result).to.eql([{ id: '1', name: 'ret' }]);
+          } else {
+            expect(result).to.eql([{ id: 1, name: 'ret' }]);
+          }
         });
 
         it('updates across multiple chunks', async function () {
@@ -1362,7 +1406,18 @@ describe('Updates', function () {
           const rows = await knex('members')
             .whereIn('id', [1, 2])
             .orderBy('id');
-          expect(rows.map((r) => r.name)).to.eql(['c1', 'c2']);
+          if (isCockroachDB(knex)) {
+            // CockroachDB's integer is int8, which pg returns as a string.
+            expect(rows).to.eql([
+              { id: '1', name: 'c1', age: '100' },
+              { id: '2', name: 'c2', age: '200' },
+            ]);
+          } else {
+            expect(rows).to.eql([
+              { id: 1, name: 'c1', age: 100 },
+              { id: 2, name: 'c2', age: 200 },
+            ]);
+          }
         });
 
         it('runs ceil(rows / chunkSize) set-based statements', async function () {
@@ -1417,14 +1472,20 @@ describe('Updates', function () {
           );
 
           const rows = await knex('memberships').orderBy(['tenant', 'id']);
-          // Number() coerces CockroachDB's int-as-string columns.
-          expect(
-            rows.map((r) => [Number(r.tenant), Number(r.id), r.name])
-          ).to.eql([
-            [7, 1, 'A'],
-            [7, 2, 'B'],
-            [8, 1, 'other-tenant'], // same id, different tenant — untouched
-          ]);
+          if (isCockroachDB(knex)) {
+            // CockroachDB's integer is int8, which pg returns as a string.
+            expect(rows).to.eql([
+              { tenant: '7', id: '1', name: 'A' },
+              { tenant: '7', id: '2', name: 'B' },
+              { tenant: '8', id: '1', name: 'other-tenant' }, // same id, different tenant — untouched
+            ]);
+          } else {
+            expect(rows).to.eql([
+              { tenant: 7, id: 1, name: 'A' },
+              { tenant: 7, id: 2, name: 'B' },
+              { tenant: 8, id: 1, name: 'other-tenant' }, // same id, different tenant — untouched
+            ]);
+          }
           await knex.schema.dropTableIfExists('memberships');
         });
 
@@ -1439,7 +1500,13 @@ describe('Updates', function () {
           ).to.be.rejectedWith(Error, /^force rollback$/);
 
           const row = await knex('members').where('id', 1).first();
-          expect(row.name).to.equal('old1'); // rollback reverted the update
+          // rollback reverted the update
+          if (isCockroachDB(knex)) {
+            // CockroachDB's integer is int8, which pg returns as a string.
+            expect(row).to.eql({ id: '1', name: 'old1', age: '1' });
+          } else {
+            expect(row).to.eql({ id: 1, name: 'old1', age: 1 });
+          }
         });
 
         it('validates the chunkSize parameter', function () {
@@ -1456,8 +1523,12 @@ describe('Updates', function () {
             { id: 1, name: 'last', age: 2 },
           ]);
           const row = await knex('members').where('id', 1).first();
-          expect(row.name).to.equal('last');
-          assertNumber(knex, row.age, 2);
+          if (isCockroachDB(knex)) {
+            // CockroachDB's integer is int8, which pg returns as a string.
+            expect(row).to.eql({ id: '1', name: 'last', age: '2' });
+          } else {
+            expect(row).to.eql({ id: 1, name: 'last', age: 2 });
+          }
         });
 
         it('throws on a duplicate key with onDuplicateKey: throw', function () {
@@ -1509,7 +1580,12 @@ describe('Updates', function () {
             .where('name', 'capped')
             .count({ c: 'id' })
             .first();
-          expect(Number(updated.c)).to.equal(10);
+          if (isPgBased(knex)) {
+            // count() is a bigint, which pg returns as a string.
+            expect(updated.c).to.equal('10');
+          } else {
+            expect(updated.c).to.equal(10);
+          }
         });
 
         it("splits a union batch under SQLite's compound-SELECT term cap", async function () {
@@ -1549,7 +1625,12 @@ describe('Updates', function () {
             .where('name', 'big')
             .count({ c: 'id' })
             .first();
-          expect(Number(updated.c)).to.equal(600);
+          if (isPgBased(knex)) {
+            // count() is a bigint, which pg returns as a string.
+            expect(updated.c).to.equal('600');
+          } else {
+            expect(updated.c).to.equal(600);
+          }
         });
 
         it('splits a composite-key case batch into 50-row chunks on SQLite', async function () {
@@ -1590,7 +1671,12 @@ describe('Updates', function () {
             .where('name', 'deep')
             .count({ c: 'id' })
             .first();
-          expect(Number(updated.c)).to.equal(1100);
+          if (isPgBased(knex)) {
+            // count() is a bigint, which pg returns as a string.
+            expect(updated.c).to.equal('1100');
+          } else {
+            expect(updated.c).to.equal(1100);
+          }
         });
 
         it('sizes a single-key case chunk by its column count on SQLite', async function () {
@@ -1628,7 +1714,12 @@ describe('Updates', function () {
             .where('name', 'flat')
             .count({ c: 'id' })
             .first();
-          expect(Number(updated.c)).to.equal(1100);
+          if (isPgBased(knex)) {
+            // count() is a bigint, which pg returns as a string.
+            expect(updated.c).to.equal('1100');
+          } else {
+            expect(updated.c).to.equal(1100);
+          }
         });
 
         it('runs a case batch fastest at the shipped SQLite chunk', async function () {
@@ -1726,7 +1817,12 @@ describe('Updates', function () {
             .where('name', 'deep')
             .count({ c: 'id' })
             .first();
-          expect(Number(updated.c)).to.equal(1100);
+          if (isPgBased(knex)) {
+            // count() is a bigint, which pg returns as a string.
+            expect(updated.c).to.equal('1100');
+          } else {
+            expect(updated.c).to.equal(1100);
+          }
         });
 
         it('sizes a single-key case chunk by its column count on PostgreSQL', async function () {
@@ -1764,7 +1860,12 @@ describe('Updates', function () {
             .where('name', 'flat')
             .count({ c: 'id' })
             .first();
-          expect(Number(updated.c)).to.equal(1100);
+          if (isPgBased(knex)) {
+            // count() is a bigint, which pg returns as a string.
+            expect(updated.c).to.equal('1100');
+          } else {
+            expect(updated.c).to.equal(1100);
+          }
         });
 
         it('runs a composite-key case batch fastest at the shipped PostgreSQL chunk', async function () {
@@ -1871,7 +1972,12 @@ describe('Updates', function () {
               .where('name', 'like', 'new%')
               .count({ c: 'id' })
               .first();
-            expect(Number(updated.c)).to.equal(SCALE_ROWS);
+            if (isPgBased(knex)) {
+              // count() is a bigint, which pg returns as a string.
+              expect(updated.c).to.equal(String(SCALE_ROWS));
+            } else {
+              expect(updated.c).to.equal(SCALE_ROWS);
+            }
           };
 
           it('union updates every row across many chunks', async function () {
@@ -1948,13 +2054,18 @@ describe('Updates', function () {
             await knex.batchUpdate('blobs', updates, 'id', { mode });
 
             const rows = await knex('blobs').orderBy('id');
-            expect(rows.map((r) => r.label)).to.eql(['a', 'b']);
-            expect(Buffer.from(rows[0].data).equals(updates[0].data)).to.equal(
-              true
-            );
-            expect(Buffer.from(rows[1].data).equals(updates[1].data)).to.equal(
-              true
-            );
+            if (isCockroachDB(knex)) {
+              // CockroachDB's integer is int8, which pg returns as a string.
+              expect(rows).to.eql([
+                { id: '1', label: 'a', data: updates[0].data },
+                { id: '2', label: 'b', data: updates[1].data },
+              ]);
+            } else {
+              expect(rows).to.eql([
+                { id: 1, label: 'a', data: updates[0].data },
+                { id: 2, label: 'b', data: updates[1].data },
+              ]);
+            }
           });
         }
 
@@ -2082,13 +2193,18 @@ describe('Updates', function () {
           });
 
           const rows = await knex('blobs').orderBy('id');
-          expect(rows.map((r) => r.label)).to.eql(['json-1', 'json-2']);
-          expect(Buffer.from(rows[0].data).equals(updates[0].data)).to.equal(
-            true
-          );
-          expect(Buffer.from(rows[1].data).equals(updates[1].data)).to.equal(
-            true
-          );
+          if (isCockroachDB(knex)) {
+            // CockroachDB's integer is int8, which pg returns as a string.
+            expect(rows).to.eql([
+              { id: '1', label: 'json-1', data: updates[0].data },
+              { id: '2', label: 'json-2', data: updates[1].data },
+            ]);
+          } else {
+            expect(rows).to.eql([
+              { id: 1, label: 'json-1', data: updates[0].data },
+              { id: 2, label: 'json-2', data: updates[1].data },
+            ]);
+          }
         });
       });
     });

@@ -27,6 +27,8 @@ PR #11 replaces #2 (closed with pointer comment, jean: "so we stop messing with 
 
 - Autoreview 2026-10-29, jean ruled A on all three: (1) `SAFE_DB_TYPE` = one name word + `(n,m)` + fixed type-keyword list (c9638203). (2) pg union never casts a raw by an INFERRED type, only columnTypes/'from_db'; inferred cast moves to the column's first bound value; CRDB now throws "unsupported binary operator" on `? * 1.5` among ints instead of rounding — accepted as loud (21359198). (3) empty batch compiles once so `.returning()` refusals match non-empty (f5c18f68). Kept as is: sqlite+pg timing tests flake risk (pg one also runs on pgnative).
 
+- Autoreview round 2 (2026-10-29): fixed e487fe11 (null uncast before a raw), f7aa0130 ('from_db' under postProcessResponse names), f4b004a2 (bench chunk counts, docs). Rulings, done in bf3e280c: #1 A Uint8Array = binary (`ArrayBuffer.isView`); #4 A Infinity/NaN in composite/array/object key → refused; #8 go `(max)`, `(n char|byte)`; #11 A `\` refused in quoted type. Still open: #5 `'last'` drops an earlier duplicate's column (jean: undefined ≠ null; merge per column proposed); #12 ruled A over the whole file: the PR's batchUpdate integration tests assert raw rows, an `if (isCockroachDB)` / `if (isPgBased)` (count) picks the literal; upstream `assertNumber` tests near l.200 left alone.
+
 **OLD OPEN**: tuning the SQLite composite-case cap from the small-cap bench sweep (keys × columns grid, CPU median) — in progress at handoff; check `git log` for the final value.
 
 Per-DBMS out-of-scope issues on the fork: #5 MySQL/MariaDB, #6 MSSQL, #7 Oracle, #8 SQLite, #9 CI bench/type tests. Related: [[project_batchupdate_modes]], [[project_hhh_dev_default_branch]].

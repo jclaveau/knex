@@ -859,7 +859,7 @@ describe('batchUpdate (db-less)', function () {
           ],
           ['id'],
           'last'
-        ).columns
+        )[0].columns
       ).to.eql(['name']);
     });
 
@@ -906,7 +906,34 @@ describe('batchUpdate (db-less)', function () {
           ['tenant', 'id'],
           'last'
         )
-      ).to.eql({ columns: ['name'], rows: [{ tenant: 1n, id: 2, name: 'b' }] });
+      ).to.eql([
+        { columns: ['name'], rows: [{ tenant: 1n, id: 2, name: 'b' }] },
+      ]);
+    });
+
+    it("splits duplicate keys into rounds in batch order with onDuplicateKey: 'each'", function () {
+      expect(
+        prepareBatch(
+          [
+            { id: 1, a: 5, b: 1 },
+            { id: 2, a: 7, b: 3 },
+            { id: 1, a: undefined, b: 2 },
+            { id: 1, a: 6, b: 4 },
+          ],
+          ['id'],
+          'each'
+        )
+      ).to.eql([
+        {
+          columns: ['a', 'b'],
+          rows: [
+            { id: 1, a: 5, b: 1 },
+            { id: 2, a: 7, b: 3 },
+          ],
+        },
+        { columns: ['b'], rows: [{ id: 1, a: undefined, b: 2 }] },
+        { columns: ['a', 'b'], rows: [{ id: 1, a: 6, b: 4 }] },
+      ]);
     });
 
     it('names a duplicate composite key holding a bigint', function () {
@@ -923,7 +950,7 @@ describe('batchUpdate (db-less)', function () {
         .to.throw(Error)
         .with.property(
           'message',
-          `Invalid batch: duplicate key ["1",2] (use onDuplicateKey: 'last' to keep the last row instead)`
+          `Invalid batch: duplicate key ["1",2] (use onDuplicateKey: 'each' to apply every row in order)`
         );
     });
 
@@ -1651,7 +1678,7 @@ describe('batchUpdate (db-less)', function () {
           ],
           ['id'],
           'last'
-        ).rows
+        )[0].rows
       ).to.eql([
         { id: 1, v: 'b' },
         { id: 2, v: 'c' },
@@ -1668,7 +1695,7 @@ describe('batchUpdate (db-less)', function () {
           ],
           ['tenant', 'id'],
           'last'
-        ).rows
+        )[0].rows
       ).to.eql([
         { tenant: 7, id: 1, v: 'c' },
         { tenant: 8, id: 1, v: 'b' },
@@ -1684,7 +1711,7 @@ describe('batchUpdate (db-less)', function () {
           ],
           ['at'],
           'last'
-        ).rows
+        )[0].rows
       ).to.eql([{ at: new Date(0), v: 'b' }]);
     });
 
@@ -1697,7 +1724,7 @@ describe('batchUpdate (db-less)', function () {
           ],
           ['token'],
           'last'
-        ).rows
+        )[0].rows
       ).to.eql([{ token: Buffer.from('ab'), v: 'b' }]);
     });
 
@@ -1710,7 +1737,7 @@ describe('batchUpdate (db-less)', function () {
           ],
           ['token'],
           'last'
-        ).rows
+        )[0].rows
       ).to.eql([{ token: new Uint8Array([1, 2]), v: 'b' }]);
     });
 
@@ -1758,7 +1785,7 @@ describe('batchUpdate (db-less)', function () {
         .to.throw(Error)
         .with.property(
           'message',
-          `Invalid batch: duplicate key [{"a":1}] (use onDuplicateKey: 'last' to keep the last row instead)`
+          `Invalid batch: duplicate key [{"a":1}] (use onDuplicateKey: 'each' to apply every row in order)`
         );
     });
 
@@ -1776,7 +1803,7 @@ describe('batchUpdate (db-less)', function () {
         .to.throw(Error)
         .with.property(
           'message',
-          `Invalid batch: duplicate key [{"a":"1"}] (use onDuplicateKey: 'last' to keep the last row instead)`
+          `Invalid batch: duplicate key [{"a":"1"}] (use onDuplicateKey: 'each' to apply every row in order)`
         );
     });
 
@@ -1797,7 +1824,7 @@ describe('batchUpdate (db-less)', function () {
           ],
           ['id'],
           'last'
-        ).rows
+        )[0].rows
       ).to.eql([
         { id: firstKey, v: 'a' },
         { id: secondKey, v: 'b' },
@@ -1813,7 +1840,7 @@ describe('batchUpdate (db-less)', function () {
           ],
           ['id'],
           'last'
-        ).rows
+        )[0].rows
       ).to.eql([{ id: { n: { d: 2, c: 1 }, a: 1 }, v: 'b' }]);
     });
 
@@ -1829,7 +1856,7 @@ describe('batchUpdate (db-less)', function () {
           ],
           ['id'],
           'last'
-        ).rows
+        )[0].rows
       ).to.eql([
         { id: firstKey, v: 'a' },
         { id: secondKey, v: 'b' },
@@ -1852,7 +1879,7 @@ describe('batchUpdate (db-less)', function () {
         .to.throw(Error)
         .with.property(
           'message',
-          `Invalid batch: duplicate key ["[Raw]"] (use onDuplicateKey: 'last' to keep the last row instead)`
+          `Invalid batch: duplicate key ["[Raw]"] (use onDuplicateKey: 'each' to apply every row in order)`
         );
     });
 
@@ -1868,7 +1895,7 @@ describe('batchUpdate (db-less)', function () {
           ],
           ['a', 'b'],
           'last'
-        ).rows
+        )[0].rows
       ).to.eql([
         { a: firstKey, b: 1, v: 'x' },
         { a: secondKey, b: 1, v: 'y' },
@@ -1886,7 +1913,7 @@ describe('batchUpdate (db-less)', function () {
           ],
           ['a', 'b'],
           'last'
-        ).rows
+        )[0].rows
       ).to.eql([{ a: sharedKey, b: 1, v: 'y' }]);
     });
 
@@ -1906,7 +1933,7 @@ describe('batchUpdate (db-less)', function () {
         .to.throw(Error)
         .with.property(
           'message',
-          `Invalid batch: duplicate key ["[Raw]",1] (use onDuplicateKey: 'last' to keep the last row instead)`
+          `Invalid batch: duplicate key ["[Raw]",1] (use onDuplicateKey: 'each' to apply every row in order)`
         );
     });
 
@@ -1927,7 +1954,7 @@ describe('batchUpdate (db-less)', function () {
           ],
           ['a', 'b'],
           'last'
-        ).rows
+        )[0].rows
       ).to.eql([
         { a: firstKey, b: 1, v: 'x' },
         { a: secondKey, b: 1, v: 'y' },
@@ -1949,7 +1976,7 @@ describe('batchUpdate (db-less)', function () {
           ],
           ['a', 'b'],
           'last'
-        ).rows
+        )[0].rows
       ).to.eql([
         { a: firstKey, b: 1, v: 'x' },
         { a: secondKey, b: 1, v: 'y' },
@@ -1975,7 +2002,7 @@ describe('batchUpdate (db-less)', function () {
           ],
           ['at', 'token', 'tag'],
           'last'
-        ).rows
+        )[0].rows
       ).to.eql([
         {
           at: new Date('2026-01-01T00:00:00Z'),
@@ -1997,7 +2024,7 @@ describe('batchUpdate (db-less)', function () {
           ],
           ['a', 'b'],
           'last'
-        ).rows
+        )[0].rows
       ).to.eql([
         { a: rawKey, b: 1, v: 'x' },
         { a: {}, b: 1, v: 'y' },
@@ -2013,7 +2040,7 @@ describe('batchUpdate (db-less)', function () {
           ],
           ['id'],
           'last'
-        ).rows
+        )[0].rows
       ).to.eql([{ id: [1, 2], v: 'b' }]);
     });
   });

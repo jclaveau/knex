@@ -1517,17 +1517,88 @@ describe('Updates', function () {
           ).to.throw('Invalid chunkSize: 0');
         });
 
-        it('keeps the last row when a key is duplicated (last-write-wins)', async function () {
-          await knex.batchUpdate('members', [
-            { id: 1, name: 'first', age: 1 },
-            { id: 1, name: 'last', age: 2 },
-          ]);
+        it('keeps the last row when a key is duplicated with onDuplicateKey: last', async function () {
+          await knex.batchUpdate(
+            'members',
+            [
+              { id: 1, name: 'first', age: 1 },
+              { id: 1, name: 'last', age: 2 },
+            ],
+            'id',
+            { onDuplicateKey: 'last' }
+          );
           const row = await knex('members').where('id', 1).first();
           if (isCockroachDB(knex)) {
             // CockroachDB's integer is int8, which pg returns as a string.
             expect(row).to.eql({ id: '1', name: 'last', age: '2' });
           } else {
             expect(row).to.eql({ id: 1, name: 'last', age: 2 });
+          }
+        });
+
+        it('applies each row of a duplicated key in order, keeping a column the later row leaves undefined', async function () {
+          await knex.batchUpdate('members', [
+            { id: 1, name: 'first', age: 5 },
+            { id: 2, name: 'other', age: 7 },
+            { id: 1, name: 'second', age: undefined },
+          ]);
+          const rows = await knex('members')
+            .whereIn('id', [1, 2])
+            .orderBy('id');
+          if (isCockroachDB(knex)) {
+            // CockroachDB's integer is int8, which pg returns as a string.
+            expect(rows).to.eql([
+              { id: '1', name: 'second', age: '5' },
+              { id: '2', name: 'other', age: '7' },
+            ]);
+          } else {
+            expect(rows).to.eql([
+              { id: 1, name: 'second', age: 5 },
+              { id: 2, name: 'other', age: 7 },
+            ]);
+          }
+        });
+
+        it("runs a raw once per row of a duplicated key with mode: 'case'", async function () {
+          await knex.batchUpdate(
+            'members',
+            [
+              { id: 1, age: knex.raw('age + 1') },
+              { id: 1, age: knex.raw('age + 1') },
+            ],
+            'id',
+            { mode: 'case' }
+          );
+          const row = await knex('members').where('id', 1).first();
+          if (isCockroachDB(knex)) {
+            // CockroachDB's integer is int8, which pg returns as a string.
+            expect(row).to.eql({ id: '1', name: 'old1', age: '3' });
+          } else {
+            expect(row).to.eql({ id: 1, name: 'old1', age: 3 });
+          }
+        });
+
+        it('returns one row per row of a duplicated key on postgres-family dialects', async function () {
+          if (!(isPostgreSQL(knex) || isCockroachDB(knex))) {
+            return this.skip();
+          }
+          const result = await knex
+            .batchUpdate('members', [
+              { id: 1, name: 'a', age: 5 },
+              { id: 1, name: 'b', age: 6 },
+            ])
+            .returning(['id', 'name']);
+          if (isCockroachDB(knex)) {
+            // CockroachDB's integer is int8, which pg returns as a string.
+            expect(result).to.eql([
+              { id: '1', name: 'a' },
+              { id: '1', name: 'b' },
+            ]);
+          } else {
+            expect(result).to.eql([
+              { id: 1, name: 'a' },
+              { id: 1, name: 'b' },
+            ]);
           }
         });
 

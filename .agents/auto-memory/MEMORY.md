@@ -5,3 +5,4 @@
 - [PR #11 batchUpdate accepted exceptions](project_batchupdate_pr11_accepted_exceptions.md) — design rule (parity with per-row .update() or loud refusal), settled rulings, open item 31, issues #5-#9
 - [batchUpdate bench chart regen](project_batchupdate_bench_chart_regen.md) — collect 7 dialect json blocks from CI job logs (REST curl) → data.json → vega charts → inkscape PNG @1451px → repin PR image SHAs via REST PATCH
 - [Track .agents/ here](../requested-memory/feedback_track_agents_here.md) — jean ruled 2026-10-29: `.agents/` is git-tracked in this fork; keep it out of upstream PRs
+- [Issue #10 / PRs #13 + #14 bind parameter caps](project_pg_array_threshold_pr13.md) — arrayParameterThreshold (#13), batchInsert bind-cap chunking + pg overflow error (#14), rulings, null-row insert parked as #15
